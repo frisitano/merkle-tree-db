@@ -1,6 +1,7 @@
-use crate::treedb::TreeDBBuilder;
-
-use super::{ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Tree, TreeDB};
+use super::{
+    null_hashes, ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Tree, TreeDBBuilder,
+    TreeDBMutBuilder, TreeMut,
+};
 
 use hash256_std_hasher::Hash256StdHasher;
 use hash_db::{AsHashDB, Prefix, EMPTY_PREFIX};
@@ -12,6 +13,7 @@ use std::marker::PhantomData;
 // ================================================================================================
 
 /// Unit struct for Sha3.
+#[derive(Debug)]
 pub struct Sha3;
 
 /// implementation of the Hasher trait for the Sha3 hasher
@@ -41,48 +43,23 @@ impl<H: Hasher> KeyFunction<H> for NoopKey<H> {
     }
 }
 
-// TESTS
-// ================================================================================================
-#[test]
-fn simple_inner_node_hash() {
-    // hash flip and flop
-    let flip = NodeHash::Hash::<Sha3>(Sha3::hash(b"flip"));
-    let flop = NodeHash::Hash::<Sha3>(Sha3::hash(b"flop"));
-    let node = Node::new_inner(flip, flop).unwrap();
-    assert_eq!(
-        node.hash(),
-        &Sha3::hash(&[Sha3::hash(b"flip"), Sha3::hash(b"flop")].concat())
-    );
-}
+/// Depth of tree
+const TREE_DEPTH: usize = 1;
 
-// test a simple node update
-#[test]
-fn simple_node_update() {
-    // hash flip and flop
-    let flip = NodeHash::Hash::<Sha3>(Sha3::hash(b"flip"));
-    let flop = NodeHash::Hash::<Sha3>(Sha3::hash(b"flop"));
-    let mut node = Node::new_inner(flip, flop).unwrap();
-    // update the left child
-    let new_hash = Sha3::hash(b"new");
-    node.set_child_hash(ChildSelector::Left, NodeHash::Hash(new_hash))
-        .unwrap();
-    // verify that the hash of the node has changed
-    assert_eq!(
-        node.hash(),
-        &Sha3::hash(&[Sha3::hash(b"new"), Sha3::hash(b"flop")].concat())
-    );
-}
+/// Test value
+const TEST_VALUE: [u8; 4] = *b"test";
 
-#[test]
-fn tree_db_get_value() {
-    const BYTE_DEPTH: usize = 1;
-    let null_values = compute_null_hashes::<Sha3>(BYTE_DEPTH * 8);
+/// Creates mock data for testing
+fn mock_data() -> (
+    MemoryDB<Sha3, NoopKey<Sha3>, DBValue>,
+    <Sha3 as Hasher>::Out,
+) {
+    let null_values = null_hashes::<Sha3>(TREE_DEPTH * 8);
 
     let mut db = MemoryDB::<Sha3, NoopKey<Sha3>, DBValue>::default();
     let hash_db = db.as_hash_db_mut();
 
-    let value = b"test".to_vec();
-    let mut current_node = Node::<Sha3>::new_value(&value);
+    let mut current_node = Node::<Sha3>::new_value(&TEST_VALUE);
 
     hash_db.emplace(
         *current_node.hash(),
@@ -90,9 +67,9 @@ fn tree_db_get_value() {
         current_node.clone().into(),
     );
 
-    for i in 0..(BYTE_DEPTH * 8) {
+    for i in 0..(TREE_DEPTH * 8) {
         current_node = Node::<Sha3>::new_inner(
-            NodeHash::Hash::<Sha3>(*current_node.hash()),
+            NodeHash::Database::<Sha3>(*current_node.hash()),
             NodeHash::Default::<Sha3>(null_values[i]),
         )
         .unwrap();
@@ -103,24 +80,107 @@ fn tree_db_get_value() {
         )
     }
 
-    let tree = TreeDBBuilder::<BYTE_DEPTH, Sha3>::new(&db, current_node.hash()).build();
-
-    let key = Key::<BYTE_DEPTH>::new(&[0]);
-    assert_eq!(tree.get_value(&key).unwrap(), Some(value));
-
-    let key = Key::<BYTE_DEPTH>::new(&[1]);
-    assert_eq!(tree.get_value(&key).unwrap(), None);
+    let root = *current_node.hash();
+    (db, root)
 }
 
-pub fn compute_null_hashes<H: Hasher>(depth: usize) -> Vec<H::Out> {
-    (0..depth + 1)
-        .scan(H::hash(&[]), |null_hash, _| {
-            let value = *null_hash;
-            *null_hash = H::hash(&[null_hash.as_ref(), null_hash.as_ref()].concat());
-            Some(value)
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect()
+// TESTS
+// ================================================================================================
+#[test]
+fn simple_inner_node_hash() {
+    // hash flip and flop
+    let flip = NodeHash::Database::<Sha3>(Sha3::hash(b"flip"));
+    let flop = NodeHash::Database::<Sha3>(Sha3::hash(b"flop"));
+    let node = Node::new_inner(flip, flop).unwrap();
+    assert_eq!(
+        node.hash().as_ref(),
+        &Sha3::hash(&[Sha3::hash(b"flip"), Sha3::hash(b"flop")].concat())
+    );
+}
+
+// test a simple node update
+#[test]
+fn simple_node_update() {
+    // hash flip and flop
+    let flip = NodeHash::Database::<Sha3>(Sha3::hash(b"flip"));
+    let flop = NodeHash::Database::<Sha3>(Sha3::hash(b"flop"));
+    let mut node = Node::new_inner(flip, flop).unwrap();
+    // update the left child
+    let new_hash = Sha3::hash(b"new");
+    node.set_child_hash(&ChildSelector::Left, NodeHash::Database(new_hash))
+        .unwrap();
+    // verify that the hash of the node has changed
+    assert_eq!(
+        node.hash().as_ref(),
+        &Sha3::hash(&[Sha3::hash(b"new"), Sha3::hash(b"flop")].concat())
+    );
+}
+
+#[test]
+fn tree_db_get_value() {
+    let (db, root) = mock_data();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root).build();
+
+    let key = Key::<TREE_DEPTH>::new(&[0]);
+    assert_eq!(tree.value(&key).unwrap(), Some(TEST_VALUE.to_vec()));
+
+    let key = Key::<TREE_DEPTH>::new(&[1]);
+    assert_eq!(tree.value(&key).unwrap(), None);
+}
+
+#[test]
+fn tree_db_proof() {
+    let (db, root) = mock_data();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root).build();
+
+    let key = Key::<TREE_DEPTH>::new(&[0]);
+    let proof = tree.proof(&key).unwrap().unwrap();
+
+    assert_eq!(proof.len(), TREE_DEPTH * 8 + 1);
+    assert_eq!(
+        proof[proof.len() - 1].value().unwrap(),
+        &TEST_VALUE.to_vec()
+    );
+    assert_eq!(proof[0].hash().as_ref(), &root);
+
+    for i in (1..proof.len()).rev() {
+        let node = &proof[i];
+        let parent = &proof[i - 1];
+        let child_selector = ChildSelector::new(key.bit((i - 1) as u8));
+        assert_eq!(
+            node.hash().as_ref(),
+            parent.child_hash(&child_selector).unwrap().hash()
+        );
+    }
+}
+
+#[test]
+fn tree_depth() {
+    let (db, root) = mock_data();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root).build();
+
+    assert_eq!(tree.depth(), TREE_DEPTH * 8);
+}
+
+#[test]
+fn tree_db_mut_insert() {
+    let (mut db, mut root) = mock_data();
+    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
+
+    let key = Key::<TREE_DEPTH>::new(&[0]);
+    let new_value = Sha3::hash(b"new").to_vec();
+
+    tree_db_mut.print();
+
+    tree_db_mut.insert(&key, new_value.clone()).unwrap();
+
+    println!("after insert");
+
+    tree_db_mut.print();
+
+    assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+
+    tree_db_mut.insert(&key, TEST_VALUE.to_vec()).unwrap();
+
+    tree_db_mut.print();
 }

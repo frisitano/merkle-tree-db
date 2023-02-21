@@ -1,21 +1,73 @@
 use super::{DBValue, Hasher, TreeError};
 
+// Value
+// ================================================================================================
+// #[derive(Debug, PartialEq, Eq)]
+// pub enum Value {
+//     /// Value stored in memory
+//     InMemory(DBValue),
+//     /// Value stored in database backend
+//     Database(DBValue),
+//     /// Value stored in database backend
+//     Default(DBValue),
+// }
+
+// impl Default for Value {
+//     fn default() -> Self {
+//         Value::Default(DBValue::default())
+//     }
+// }
+
+/// Value implementation
+// impl Value {
+//     // ACCESSORS
+//     // --------------------------------------------------------------------------------------------
+
+//     /// Returns the value of the node
+//     pub fn value(&self) -> &DBValue {
+//         match self {
+//             Value::InMemory(value) => value,
+//             Value::Database(value) => value,
+//             Value::Default(value) => value,
+//         }
+//     }
+
+//     /// Returns the hash of the node
+//     pub fn hash<H: Hasher>(&self) -> H::Out {
+//         match self {
+//             Value::InMemory(value) => H::hash(value),
+//             Value::Database(value) => H::hash(value),
+//             Value::Default(value) => H::hash(value),
+//         }
+//     }
+// }
+
 // NodeHash
 // ================================================================================================
 
 /// NodeHash is used to store the hash of a node
 /// If the node is stored in memory, the hash is stored in the InMemory variant
-/// If the node is stored in backend, the hash is stored in the Hash variant
+/// If the node is stored in database backend, the hash is stored in the Database variant
 /// This is used to give the client knowledge of whether the node is in memory or not
 /// The node will be in memory if it has been updated since the last commit
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash)]
 pub enum NodeHash<H: Hasher> {
     /// Hash associated with a node stored in memory
     InMemory(H::Out),
-    /// Hash associated with a node stored in backend
-    Hash(H::Out),
+    /// Hash associated with a node stored in database backend
+    Database(H::Out),
     /// Hash associated with a default node
     Default(H::Out),
+}
+
+impl<H: Hasher> std::fmt::Debug for NodeHash<H> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NodeHash::InMemory(hash) => write!(f, "InMemory({hash:?})"),
+            NodeHash::Database(hash) => write!(f, "Database({hash:?})"),
+            NodeHash::Default(hash) => write!(f, "Default({hash:?})"),
+        }
+    }
 }
 
 /// NodeHash implementation
@@ -24,7 +76,7 @@ impl<H: Hasher> NodeHash<H> {
     pub fn hash(&self) -> &H::Out {
         match self {
             NodeHash::InMemory(hash) => hash,
-            NodeHash::Hash(hash) => hash,
+            NodeHash::Database(hash) => hash,
             NodeHash::Default(hash) => hash,
         }
     }
@@ -39,7 +91,7 @@ impl<H: Hasher> NodeHash<H> {
 impl<H: Hasher> Clone for NodeHash<H> {
     fn clone(&self) -> Self {
         match self {
-            NodeHash::Hash(hash) => NodeHash::Hash(*hash),
+            NodeHash::Database(hash) => NodeHash::Database(*hash),
             NodeHash::InMemory(hash) => NodeHash::InMemory(*hash),
             NodeHash::Default(hash) => NodeHash::Default(*hash),
         }
@@ -53,6 +105,13 @@ impl<H: Hasher> Default for NodeHash<H> {
         NodeHash::Default(H::Out::default())
     }
 }
+
+/// Implement AsRef<H::Out> for NodeHash
+// impl<H: Hasher> AsRef<H::Out> for NodeHash<H> {
+//     fn as_ref(&self) -> &H::Out {
+//         self.hash()
+//     }
+// }
 
 // Node
 // ================================================================================================
@@ -79,7 +138,6 @@ impl ChildSelector {
 /// node stores the height, left child hash, and right child hash. The height is used to determine
 /// determine the default hash of an empty child node such that it can be fetched from cache to
 /// calculate the hash of the current node.
-#[derive(Debug)]
 pub enum Node<H: Hasher> {
     Value {
         hash: H::Out,
@@ -91,15 +149,33 @@ pub enum Node<H: Hasher> {
         right: NodeHash<H>,
     },
 }
+
+impl<H: Hasher> std::fmt::Debug for Node<H> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Node::Value { hash, value } => f
+                .debug_struct("Value")
+                .field("hash", &hash)
+                .field("value", &value)
+                .finish(),
+            Node::Inner { hash, left, right } => f
+                .debug_struct("Inner")
+                .field("hash", &hash)
+                .field("left", &left)
+                .field("right", &right)
+                .finish(),
+        }
+    }
+}
+
 /// Node implementation
 impl<H: Hasher> Node<H> {
     // CONSTRUCTORS
     // --------------------------------------------------------------------------------------------
     /// constructs a new value node
     pub fn new_value(value: &[u8]) -> Self {
-        let hash = H::hash(value);
         Node::Value {
-            hash,
+            hash: H::hash(value),
             value: value.to_vec(),
         }
     }
@@ -116,6 +192,7 @@ impl<H: Hasher> Node<H> {
         }
 
         let hash = H::hash(&[left.hash().as_ref(), right.hash().as_ref()].concat());
+
         Ok(Node::Inner { hash, left, right })
     }
 
@@ -126,7 +203,7 @@ impl<H: Hasher> Node<H> {
     /// valid for inner nodes.
     /// Errors:
     /// - UnexpectedNodeType: if the node is a value node
-    pub fn child_hash(&self, child: ChildSelector) -> Result<&NodeHash<H>, TreeError> {
+    pub fn child_hash(&self, child: &ChildSelector) -> Result<&NodeHash<H>, TreeError> {
         match self {
             Node::Value { hash: _, value: _ } => Err(TreeError::UnexpectedNodeType),
             Node::Inner {
@@ -171,17 +248,14 @@ impl<H: Hasher> Node<H> {
     /// Returns true if both children are default hashes
     /// Errors:
     /// - UnexpectedNodeType: if the node is a value node
-    pub fn is_default(&self) -> Result<bool, TreeError> {
+    pub fn is_default(&self) -> bool {
         match self {
-            Node::Value { hash: _, value: _ } => Err(TreeError::UnexpectedNodeType),
+            Node::Value { hash: _, value } => value.is_empty(),
             Node::Inner {
                 hash: _,
                 left,
                 right,
-            } => Ok(matches!(
-                (left, right),
-                (NodeHash::Default(_), NodeHash::Default(_))
-            )),
+            } => matches!((left, right), (NodeHash::Default(_), NodeHash::Default(_))),
         }
     }
 
@@ -189,7 +263,7 @@ impl<H: Hasher> Node<H> {
     // --------------------------------------------------------------------------------------------
     pub fn set_child_hash(
         &mut self,
-        child: ChildSelector,
+        child: &ChildSelector,
         child_hash: NodeHash<H>,
     ) -> Result<(), TreeError> {
         match self {
@@ -223,6 +297,16 @@ impl<H: Hasher> Clone for Node<H> {
                 left: left.clone(),
                 right: right.clone(),
             },
+        }
+    }
+}
+
+/// Implements default for Node
+impl<H: Hasher> Default for Node<H> {
+    fn default() -> Self {
+        Node::Value {
+            hash: H::Out::default(),
+            value: DBValue::default(),
         }
     }
 }
@@ -302,9 +386,18 @@ impl<H: Hasher> TryFrom<Vec<u8>> for Node<H> {
                 let left_hash = decode_hash::<H>(&value[1..1 + H::LENGTH])?;
                 let right_hash = decode_hash::<H>(&value[1 + H::LENGTH..])?;
                 match inner_node_type {
-                    1 => Node::new_inner(NodeHash::Hash(left_hash), NodeHash::Hash(right_hash)),
-                    2 => Node::new_inner(NodeHash::Hash(left_hash), NodeHash::Default(right_hash)),
-                    3 => Node::new_inner(NodeHash::Default(left_hash), NodeHash::Hash(right_hash)),
+                    1 => Node::new_inner(
+                        NodeHash::Database(left_hash),
+                        NodeHash::Database(right_hash),
+                    ),
+                    2 => Node::new_inner(
+                        NodeHash::Database(left_hash),
+                        NodeHash::Default(right_hash),
+                    ),
+                    3 => Node::new_inner(
+                        NodeHash::Default(left_hash),
+                        NodeHash::Database(right_hash),
+                    ),
                     _ => Err(TreeError::DecodeNodeFailed),
                 }
             }

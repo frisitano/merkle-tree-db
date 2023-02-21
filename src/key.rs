@@ -28,7 +28,7 @@ impl<const N: usize> Key<N> {
     }
 
     /// Returns the bit at the i'th index of the key
-    pub fn get_bit(&self, i: &u8) -> bool {
+    pub fn bit(&self, i: u8) -> bool {
         let byte_pos = i / BYTE_SIZE;
         let bit_pos = i % BYTE_SIZE;
         let bit = self.0[byte_pos as usize] >> (7 - bit_pos) & 1;
@@ -72,7 +72,7 @@ impl<'a, const N: usize> Iterator for KeyIter<'a, N> {
             return None;
         }
 
-        let result = self.key.get_bit(&self.element);
+        let result = self.key.bit(self.element);
         self.element += 1;
 
         Some(result)

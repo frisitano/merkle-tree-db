@@ -1,6 +1,6 @@
 use hash_db::{HashDBRef, EMPTY_PREFIX};
 
-use super::{ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Tree, TreeError};
+use super::{ChildSelector, DBValue, Hasher, Key, Node, Tree, TreeError};
 
 // TreeDBBuilder
 // ================================================================================================

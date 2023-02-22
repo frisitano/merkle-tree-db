@@ -18,7 +18,7 @@ pub enum NodeHash<H: Hasher> {
     Default(H::Out),
 }
 
-impl<H: Hasher> std::fmt::Debug for NodeHash<H> {
+impl<H: Hasher> core::fmt::Debug for NodeHash<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NodeHash::InMemory(hash) => write!(f, "InMemory({hash:?})"),
@@ -96,6 +96,7 @@ impl ChildSelector {
 /// node stores the height, left child hash, and right child hash. The height is used to determine
 /// determine the default hash of an empty child node such that it can be fetched from cache to
 /// calculate the hash of the current node.
+#[derive(PartialEq, Eq)]
 pub enum Node<H: Hasher> {
     Value {
         hash: H::Out,

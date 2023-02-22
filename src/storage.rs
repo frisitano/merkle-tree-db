@@ -59,17 +59,17 @@ impl<H: Hasher> NodeStorage<H> {
         self.nodes.is_empty()
     }
 
-    /// iterate over the storage
+    /// iterate over key - value pairs of the storage
     pub fn iter(&self) -> hashbrown::hash_map::Iter<H::Out, (Node<H>, usize)> {
         self.nodes.iter()
     }
 
-    /// turns the storage into an iterator
-    pub fn into_iter(self) -> hashbrown::hash_map::IntoIter<H::Out, (Node<H>, usize)> {
-        self.nodes.into_iter()
+    /// drain the storage
+    pub fn drain(&mut self) -> hashbrown::hash_map::Drain<H::Out, (Node<H>, usize)> {
+        self.nodes.drain()
     }
 
-    /// exposes the inner storage
+    /// consume the `NodeStorage` and returns the inner `HashMap`
     pub fn inner(self) -> HashMap<H::Out, (Node<H>, usize)> {
         self.nodes
     }

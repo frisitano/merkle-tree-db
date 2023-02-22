@@ -1,6 +1,6 @@
 use super::{
-    null_hashes, ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Tree, TreeDBBuilder,
-    TreeDBMutBuilder, TreeMut,
+    ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Tree, TreeDBBuilder, TreeDBMutBuilder,
+    TreeMut,
 };
 
 use hash256_std_hasher::Hash256StdHasher;
@@ -82,6 +82,17 @@ fn mock_data() -> (
 
     let root = *current_node.hash();
     (db, root)
+}
+
+/// Return the null hashes of a tree of depth D
+pub fn null_hashes<H: Hasher>(depth: usize) -> Vec<H::Out> {
+    let mut hashes = Vec::with_capacity(depth);
+    hashes.push(H::hash(&[]));
+    for i in 1..depth {
+        let hash = H::hash(&[hashes[i - 1].as_ref(), hashes[i - 1].as_ref()].concat());
+        hashes.push(hash);
+    }
+    hashes
 }
 
 // TESTS
@@ -170,17 +181,52 @@ fn tree_db_mut_insert() {
     let key = Key::<TREE_DEPTH>::new(&[0]);
     let new_value = Sha3::hash(b"new").to_vec();
 
-    tree_db_mut.print();
-
-    tree_db_mut.insert(&key, new_value.clone()).unwrap();
-
-    println!("after insert");
-
-    tree_db_mut.print();
+    let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
 
     assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+    assert_eq!(old_value, Some(TEST_VALUE.to_vec()));
+}
 
-    tree_db_mut.insert(&key, TEST_VALUE.to_vec()).unwrap();
+#[test]
+fn tree_db_mut_remove() {
+    let (mut db, mut root) = mock_data();
+    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
 
-    tree_db_mut.print();
+    let key = Key::<TREE_DEPTH>::new(&[0]);
+    let old_value = tree_db_mut.remove(&key).unwrap();
+
+    assert_eq!(tree_db_mut.value(&key).unwrap(), None);
+    assert_eq!(old_value, Some(TEST_VALUE.to_vec()));
+
+    let key = Key::<TREE_DEPTH>::new(&[122]);
+    let old_value = tree_db_mut.remove(&key).unwrap();
+    assert_eq!(old_value, None);
+}
+
+#[test]
+fn tree_db_mut_test_commit() {
+    let (mut db, mut root) = mock_data();
+    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
+
+    let key = Key::<TREE_DEPTH>::new(&[10]);
+    let new_value = Sha3::hash(b"new").to_vec();
+
+    let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
+
+    assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+    assert_eq!(old_value, None);
+
+    let key = Key::<TREE_DEPTH>::new(&[0]);
+    let new_value = Sha3::hash(b"new1").to_vec();
+
+    let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
+
+    assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+    assert_eq!(old_value, Some(TEST_VALUE.to_vec()));
+
+    tree_db_mut.commit();
+
+    let key = Key::<TREE_DEPTH>::new(&[10]);
+    let value = tree_db_mut.value(&key).unwrap();
+    println!("value: {:?}", value);
 }

@@ -31,7 +31,7 @@ impl<const N: usize> Key<N> {
     pub fn bit(&self, i: u8) -> bool {
         let byte_pos = i / BYTE_SIZE;
         let bit_pos = i % BYTE_SIZE;
-        let bit = self.0[byte_pos as usize] >> (7 - bit_pos) & 1;
+        let bit = (self.0[byte_pos as usize] >> (7 - bit_pos)) & 1;
         bit != 0
     }
 

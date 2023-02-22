@@ -1,6 +1,7 @@
 use super::{
     ChildSelector, DBValue, HashMap, Hasher, Key, Node, NodeHash, NodeStorage, TreeError, TreeMut,
 };
+use core::cmp::Ordering;
 use hash_db::{HashDB, EMPTY_PREFIX};
 
 // TreeDBMutBuilder
@@ -34,7 +35,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
             db: self.db,
             root: self.root,
             root_handle,
-            null_hashes: null_hashes::<H>(D * 8),
+            null_hashes: null_nodes::<H>(D * 8),
             // recorder: self.recorder.map(core::cell::RefCell::new),
         }
     }
@@ -50,28 +51,82 @@ pub struct TreeDBMut<'db, const D: usize, H: Hasher> {
     db: &'db mut dyn HashDB<H, DBValue>,
     root: &'db mut H::Out,
     root_handle: NodeHash<H>,
-    null_hashes: Vec<H::Out>,
+    null_hashes: HashMap<H::Out, Node<H>>,
     // depth: usize,
     // recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
 
 impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
-    pub fn commit(&mut self) {}
+    /// commit the changes of insertions held in storage and removes held in death row to the db
+    pub fn commit(&mut self) {
+        // iterate over storage and check if the node is in death row
+        for (key, (node, insert_count)) in self.storage.drain() {
+            // check if the node is in death row
+            match self.death_row.remove(&key) {
+                // if the node is in death row, check if the count is 0
+                Some(death_count) => {
+                    // compare the death count with the insert count
+                    match insert_count.cmp(&death_count) {
+                        // if they are the same do nothing
+                        Ordering::Equal => {}
+                        // if the count is greater than 0, insert the node to db
+                        Ordering::Greater => {
+                            for _ in 0..insert_count - death_count {
+                                self.db.emplace(key, EMPTY_PREFIX, node.clone().into());
+                            }
+                        }
+                        // if the count is less than 0, delete the node from db
+                        Ordering::Less => {
+                            for _ in 0..death_count - insert_count {
+                                self.db.remove(&key, EMPTY_PREFIX);
+                            }
+                        }
+                    }
+                }
+                // if the node is not in death row, insert the node to db count times
+                None => {
+                    for _ in 0..insert_count {
+                        self.db.emplace(key, EMPTY_PREFIX, node.clone().into());
+                    }
+                }
+            }
+        }
+
+        for (key, count) in self.death_row.drain() {
+            for _ in 0..count {
+                self.db.remove(&key, EMPTY_PREFIX);
+            }
+        }
+
+        *self.root = *self.root_handle.hash();
+        self.root_handle = NodeHash::Database(*self.root);
+    }
 
     fn lookup(
         &self,
-        node_hash: &H::Out,
+        node_hash: &NodeHash<H>,
         proof: &mut Option<Vec<Node<H>>>,
     ) -> Result<Node<H>, TreeError> {
-        if let Some(node) = self.storage.get(node_hash) {
-            return Ok(node.clone());
-        }
-
-        let data = self
-            .db
-            .get(node_hash, EMPTY_PREFIX)
-            .ok_or(TreeError::DataNotFound)?;
-        let node: Node<H> = data.try_into()?;
+        let node = match node_hash {
+            NodeHash::InMemory(hash) => self
+                .storage
+                .get(hash)
+                .cloned()
+                .ok_or(TreeError::DataNotFound),
+            NodeHash::Database(hash) => {
+                let data = self
+                    .db
+                    .get(hash, EMPTY_PREFIX)
+                    .ok_or(TreeError::DataNotFound)?;
+                let node: Node<H> = data.try_into()?;
+                Ok(node)
+            }
+            NodeHash::Default(hash) => self
+                .null_hashes
+                .get(hash)
+                .cloned()
+                .ok_or(TreeError::DataNotFound),
+        }?;
 
         if let Some(proof) = proof.as_mut() {
             proof.push(node.clone());
@@ -85,15 +140,15 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         key: &Key<D>,
         proof: &mut Option<Vec<Node<H>>>,
     ) -> Result<Option<Node<H>>, TreeError> {
-        let mut current_node = self.lookup(self.root_handle.hash(), proof)?;
+        let mut current_node = self.lookup(&self.root_handle, proof)?;
 
         for bit in key.iter() {
             let child_hash = current_node.child_hash(&ChildSelector::new(bit))?;
-            if child_hash.is_default() {
+            if child_hash.is_default() && proof.is_none() {
                 return Ok(None);
             }
 
-            current_node = self.lookup(child_hash.hash(), proof)?;
+            current_node = self.lookup(child_hash, proof)?;
         }
 
         Ok(Some(current_node))
@@ -124,15 +179,23 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         key: &Key<D>,
         value: &[u8],
         key_index: u8,
-    ) -> Result<(Node<H>, bool), TreeError> {
+    ) -> Result<(Node<H>, Option<DBValue>, bool), TreeError> {
         // If we have reached the leaf node, create a new leaf node with the specified value.
         if key_index == (D * 8) as u8 {
             let node = Node::new_value(value);
 
+            // fetch the old node if it exists
+            let old_node = match current_hash {
+                NodeHash::InMemory(_) | NodeHash::Database(_) => {
+                    Some(self.lookup(current_hash, &mut None)?.value()?.clone())
+                }
+                NodeHash::Default(_) => None,
+            };
+
             // If the new node has the same hash as the current node, return the current node
             // as the node has not changed.
             if node.hash() == current_hash.hash() {
-                return Ok((node, false));
+                return Ok((node, old_node, false));
             }
 
             if !node.is_default() {
@@ -141,23 +204,23 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
 
             self.remove_node(current_hash);
 
-            return Ok((node, true));
+            return Ok((node, old_node, true));
         }
 
         // If we have not reached the leaf node lookup the current node.
-        let mut current_node = self.lookup(current_hash.hash(), &mut None)?;
+        let mut current_node = self.lookup(current_hash, &mut None)?;
 
         // Select the appropriate child based on the key bit at the current index and lookup.
         let child_selector = ChildSelector::new(key.bit(key_index));
         let child_hash = current_node.child_hash(&child_selector)?;
 
-        let (child_node, child_changed) = self.insert_at(child_hash, key, value, key_index + 1)?;
+        let (child_node, old_node, changed) =
+            self.insert_at(child_hash, key, value, key_index + 1)?;
 
-        if !child_changed {
-            return Ok((current_node, false));
+        if !changed {
+            return Ok((current_node, old_node, false));
         }
 
-        println!("new child node: {:?}", child_node.hash());
         let child_hash: NodeHash<H> = if child_node.is_default() {
             NodeHash::Default(*child_node.hash())
         } else {
@@ -170,7 +233,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         }
         self.remove_node(current_hash);
 
-        Ok((current_node, true))
+        Ok((current_node, old_node, true))
     }
 
     pub fn print(&self) {
@@ -182,8 +245,6 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         println!("storage {}", self.storage.iter().count());
         // print the death_row
         println!("death_row: {:?}", self.death_row);
-        // print the db
-        // println!("db: {:?}", self.db);
     }
 }
 
@@ -192,7 +253,7 @@ impl<'db, const N: usize, H: Hasher> TreeMut<H, N> for TreeDBMut<'db, N, H> {
     /// Return the root of the tree
     fn root(&mut self) -> &H::Out {
         self.commit();
-        self.root()
+        self.root
     }
 
     /// Iterates through the key and fetches the specified child hash for each inner
@@ -221,9 +282,9 @@ impl<'db, const N: usize, H: Hasher> TreeMut<H, N> for TreeDBMut<'db, N, H> {
         }
     }
 
-    fn insert(&mut self, key: &Key<N>, value: DBValue) -> Result<(), TreeError> {
+    fn insert(&mut self, key: &Key<N>, value: DBValue) -> Result<Option<DBValue>, TreeError> {
         let current_root = self.root_handle.clone();
-        let (new_root, changed) = self.insert_at(&current_root, key, &value, 0)?;
+        let (new_root, old_node, changed) = self.insert_at(&current_root, key, &value, 0)?;
 
         if changed {
             self.remove_node(&current_root);
@@ -231,24 +292,42 @@ impl<'db, const N: usize, H: Hasher> TreeMut<H, N> for TreeDBMut<'db, N, H> {
             self.storage.insert(new_root);
         }
 
-        Ok(())
+        Ok(old_node)
     }
 
-    fn remove(&mut self, key: &crate::Key<N>) -> Result<(), crate::TreeError> {
-        todo!()
+    fn remove(&mut self, key: &Key<N>) -> Result<Option<DBValue>, TreeError> {
+        self.insert(key, vec![])
     }
 }
 
 // Helpers
 // ================================================================================================
 
-/// Return the null hashes of a tree of depth D
-pub fn null_hashes<H: Hasher>(depth: usize) -> Vec<H::Out> {
-    let mut hashes = Vec::with_capacity(depth);
-    hashes.push(H::hash(&[]));
-    for i in 1..depth {
-        let hash = H::hash(&[hashes[i - 1].as_ref(), hashes[i - 1].as_ref()].concat());
-        hashes.push(hash);
+/// Return the HashMap hashing node hash to Node for null nodes of a tree of depth D
+pub fn null_nodes<H: Hasher>(depth: usize) -> HashMap<H::Out, Node<H>> {
+    let mut hashes = HashMap::with_capacity(depth);
+    let mut current_hash = H::hash(&[]);
+
+    hashes.insert(
+        current_hash,
+        Node::Value {
+            hash: current_hash,
+            value: vec![],
+        },
+    );
+
+    for _ in 1..depth {
+        let next_hash = H::hash(&[current_hash.as_ref(), current_hash.as_ref()].concat());
+        hashes.insert(
+            next_hash,
+            Node::Inner {
+                hash: next_hash,
+                left: NodeHash::Default(current_hash),
+                right: NodeHash::Default(current_hash),
+            },
+        );
+        current_hash = next_hash;
     }
+
     hashes
 }

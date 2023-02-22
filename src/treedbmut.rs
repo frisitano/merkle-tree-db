@@ -1,131 +1,7 @@
-use super::{ChildSelector, DBValue, Hasher, Key, Node, NodeHash, TreeError, TreeMut};
+use super::{
+    ChildSelector, DBValue, HashMap, Hasher, Key, Node, NodeHash, NodeStorage, TreeError, TreeMut,
+};
 use hash_db::{HashDB, EMPTY_PREFIX};
-use hashbrown::HashMap;
-
-// NodeStorage
-// ================================================================================================
-
-/// Handle to a node stored in memory
-// #[derive(Debug, PartialEq, Eq)]
-// pub struct StorageHandle(usize);
-
-// /// Compact and cache-friendly storage for Trie nodes.
-// struct NodeStorage<H: Hasher> {
-//     nodes: Vec<Node<H>>,
-//     free_indices: VecDeque<usize>,
-// }
-
-// impl<H: Hasher> NodeStorage<H> {
-//     /// Create a new storage.
-//     fn empty() -> Self {
-//         NodeStorage {
-//             nodes: Vec::new(),
-//             free_indices: VecDeque::new(),
-//         }
-//     }
-
-//     /// Allocate a new node in the storage.
-//     fn alloc(&mut self, node: Node<H>) -> StorageHandle {
-//         if let Some(idx) = self.free_indices.pop_front() {
-//             self.nodes[idx] = node;
-//             StorageHandle(idx)
-//         } else {
-//             self.nodes.push(node);
-//             StorageHandle(self.nodes.len() - 1)
-//         }
-//     }
-
-//     /// Remove a node from the storage, consuming the handle and returning the node.
-//     fn destroy(&mut self, handle: StorageHandle) -> Node<H> {
-//         let idx = handle.0;
-
-//         self.free_indices.push_back(idx);
-//         mem::replace(&mut self.nodes[idx], Node::<H>::default())
-//     }
-// }
-
-// impl<'a, L: TrieLayout> Index<&'a StorageHandle> for NodeStorage<L> {
-// 	type Output = Node<L>;
-
-// 	fn index(&self, handle: &'a StorageHandle) -> &Node<L> {
-// 		match self.nodes[handle.0] {
-// 			Stored::New(ref node) => node,
-// 			Stored::Cached(ref node, _) => node,
-// 		}
-// 	}
-// }
-
-trait NodeStorageTrait<H: Hasher> {
-    fn empty() -> Self;
-    fn get(&self, hash: &H::Out) -> Option<&Node<H>>;
-    fn insert(&mut self, node: Node<H>);
-    fn remove(&mut self, hash: &H::Out) -> Option<Node<H>>;
-    fn contains(&self, hash: &H::Out) -> bool;
-    fn is_empty(&self) -> bool;
-    fn iter(&self) -> hashbrown::hash_map::Iter<H::Out, (Node<H>, usize)>;
-}
-
-/// NodeStorage used to store in memory nodes
-#[derive(Debug)]
-pub struct NodeStorage<H: Hasher> {
-    nodes: HashMap<H::Out, (Node<H>, usize)>,
-}
-
-impl<H: Hasher> NodeStorageTrait<H> for NodeStorage<H> {
-    /// create a new empty storage
-    fn empty() -> Self {
-        Self {
-            nodes: HashMap::new(),
-        }
-    }
-
-    /// get a node from the storage
-    fn get(&self, hash: &H::Out) -> Option<&Node<H>> {
-        self.nodes.get(hash).map(|(node, _)| node)
-    }
-
-    /// insert a node into the storage
-    fn insert(&mut self, node: Node<H>) {
-        let hash = node.hash();
-        self.nodes
-            .entry(*hash)
-            .and_modify(|(node, count)| {
-                *node = node.clone();
-                *count += 1;
-            })
-            .or_insert((node, 1));
-    }
-
-    /// remove a node from the storage
-    fn remove(&mut self, hash: &H::Out) -> Option<Node<H>> {
-        self.nodes
-            .get_mut(hash)
-            .and_then(|(node, count)| {
-                *count -= 1;
-                if *count == 0 {
-                    Some(node.clone())
-                } else {
-                    None
-                }
-            })
-            .and_then(|node| self.nodes.remove(hash).map(|_| node))
-    }
-
-    /// check if a node is in the storage
-    fn contains(&self, hash: &H::Out) -> bool {
-        self.nodes.contains_key(hash)
-    }
-
-    /// check if the storage is empty
-    fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
-    }
-
-    /// iterate over the storage
-    fn iter(&self) -> hashbrown::hash_map::Iter<H::Out, (Node<H>, usize)> {
-        self.nodes.iter()
-    }
-}
 
 // TreeDBMutBuilder
 // ================================================================================================
@@ -180,9 +56,7 @@ pub struct TreeDBMut<'db, const D: usize, H: Hasher> {
 }
 
 impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
-    pub fn commit(&mut self) {
-        todo!()
-    }
+    pub fn commit(&mut self) {}
 
     fn lookup(
         &self,
@@ -261,7 +135,10 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
                 return Ok((node, false));
             }
 
-            self.storage.insert(node.clone());
+            if !node.is_default() {
+                self.storage.insert(node.clone());
+            }
+
             self.remove_node(current_hash);
 
             return Ok((node, true));

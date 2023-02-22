@@ -1,47 +1,5 @@
 use super::{DBValue, Hasher, TreeError};
 
-// Value
-// ================================================================================================
-// #[derive(Debug, PartialEq, Eq)]
-// pub enum Value {
-//     /// Value stored in memory
-//     InMemory(DBValue),
-//     /// Value stored in database backend
-//     Database(DBValue),
-//     /// Value stored in database backend
-//     Default(DBValue),
-// }
-
-// impl Default for Value {
-//     fn default() -> Self {
-//         Value::Default(DBValue::default())
-//     }
-// }
-
-/// Value implementation
-// impl Value {
-//     // ACCESSORS
-//     // --------------------------------------------------------------------------------------------
-
-//     /// Returns the value of the node
-//     pub fn value(&self) -> &DBValue {
-//         match self {
-//             Value::InMemory(value) => value,
-//             Value::Database(value) => value,
-//             Value::Default(value) => value,
-//         }
-//     }
-
-//     /// Returns the hash of the node
-//     pub fn hash<H: Hasher>(&self) -> H::Out {
-//         match self {
-//             Value::InMemory(value) => H::hash(value),
-//             Value::Database(value) => H::hash(value),
-//             Value::Default(value) => H::hash(value),
-//         }
-//     }
-// }
-
 // NodeHash
 // ================================================================================================
 

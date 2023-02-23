@@ -1,12 +1,10 @@
 use super::{DBValue, Hasher, Key, Node, TreeError};
 
-// INTERFACES
+// TRAITS
 // ================================================================================================
 
-/// A key-value datastore implemented as a database-backed sparse merkle tree.  The tree root,
-/// internal node hashes and leaves are all of type H::Out (the hash digest).  The values are of type
-/// `Vec<u8>`.  Keys `D` bits long, where `D` is the depth of the tree.   
-pub trait Tree<H: Hasher, const N: usize> {
+/// A key-value datastore implemented as a database-backed sparse merkle tree.  
+pub trait SparseTree<H: Hasher, const N: usize> {
     /// Returns the root of the tree.
     fn root(&self) -> &H::Out;
 
@@ -25,7 +23,8 @@ pub trait Tree<H: Hasher, const N: usize> {
     fn proof(&self, key: &Key<N>) -> Result<Option<Vec<Node<H>>>, TreeError>;
 }
 
-pub trait TreeMut<H: Hasher, const N: usize> {
+/// A mutable key-value datastore implemented as a database-backed sparse merkle tree.
+pub trait SparseTreeMut<H: Hasher, const N: usize> {
     /// Returns the root of the tree.
     fn root(&mut self) -> &H::Out;
 
@@ -48,4 +47,9 @@ pub trait TreeMut<H: Hasher, const N: usize> {
 
     /// Removes a value at the provided key.
     fn remove(&mut self, key: &Key<N>) -> Result<Option<DBValue>, TreeError>;
+}
+
+/// A trait that allows recording of tree nodes.
+pub trait TreeRecorder<H: Hasher> {
+    fn record(&mut self, node: &Node<H>);
 }

@@ -1,5 +1,6 @@
 use super::{
-    ChildSelector, DBValue, HashMap, Hasher, Key, Node, NodeHash, NodeStorage, TreeError, TreeMut,
+    ChildSelector, DBValue, HashMap, Hasher, Key, Node, NodeHash, NodeStorage, SparseTreeMut,
+    TreeError, TreeRecorder,
 };
 use core::cmp::Ordering;
 use hash_db::{HashDB, EMPTY_PREFIX};
@@ -12,7 +13,7 @@ pub struct TreeDBMutBuilder<'db, const D: usize, H: Hasher> {
     db: &'db mut dyn HashDB<H, DBValue>,
     root: &'db mut H::Out,
     // depth: usize,
-    // recorder: Option<&'db mut dyn TreeRecorder<H>>,
+    recorder: Option<&'db mut dyn TreeRecorder<H>>,
 }
 
 /// Implementation of a TreeDBMutBuilder
@@ -22,8 +23,23 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
         Self {
             db,
             root,
-            // recorder: None,
+            recorder: None,
         }
+    }
+
+    /// Add a recorder to the db buidler
+    pub fn with_recorder(mut self, recorder: &'db mut dyn TreeRecorder<H>) -> Self {
+        self.recorder = Some(recorder);
+        self
+    }
+
+    /// Add an optional recorder to the db builder
+    pub fn with_optional_recorder<'recorder: 'db>(
+        mut self,
+        recorder: Option<&'recorder mut dyn TreeRecorder<H>>,
+    ) -> Self {
+        self.recorder = recorder.map(|r| r as _);
+        self
     }
 
     /// Consumes the builder and returns a TreeDBMut
@@ -35,8 +51,8 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
             db: self.db,
             root: self.root,
             root_handle,
-            null_hashes: null_nodes::<H>(D * 8),
-            // recorder: self.recorder.map(core::cell::RefCell::new),
+            null_nodes: null_nodes::<H>(D * 8),
+            recorder: self.recorder.map(core::cell::RefCell::new),
         }
     }
 }
@@ -51,9 +67,9 @@ pub struct TreeDBMut<'db, const D: usize, H: Hasher> {
     db: &'db mut dyn HashDB<H, DBValue>,
     root: &'db mut H::Out,
     root_handle: NodeHash<H>,
-    null_hashes: HashMap<H::Out, Node<H>>,
+    null_nodes: HashMap<H::Out, Node<H>>,
     // depth: usize,
-    // recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
+    recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
 
 impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
@@ -63,7 +79,6 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         for (key, (node, insert_count)) in self.storage.drain() {
             // check if the node is in death row
             match self.death_row.remove(&key) {
-                // if the node is in death row, check if the count is 0
                 Some(death_count) => {
                     // compare the death count with the insert count
                     match insert_count.cmp(&death_count) {
@@ -119,10 +134,15 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
                     .get(hash, EMPTY_PREFIX)
                     .ok_or(TreeError::DataNotFound)?;
                 let node: Node<H> = data.try_into()?;
+
+                if let Some(recorder) = self.recorder.as_ref() {
+                    recorder.borrow_mut().record(&node);
+                }
+
                 Ok(node)
             }
             NodeHash::Default(hash) => self
-                .null_hashes
+                .null_nodes
                 .get(hash)
                 .cloned()
                 .ok_or(TreeError::DataNotFound),
@@ -249,7 +269,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
 }
 
 /// Implementation of a TreeDBMut
-impl<'db, const N: usize, H: Hasher> TreeMut<H, N> for TreeDBMut<'db, N, H> {
+impl<'db, const N: usize, H: Hasher> SparseTreeMut<H, N> for TreeDBMut<'db, N, H> {
     /// Return the root of the tree
     fn root(&mut self) -> &H::Out {
         self.commit();

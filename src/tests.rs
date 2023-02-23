@@ -1,6 +1,6 @@
 use super::{
-    ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Tree, TreeDBBuilder, TreeDBMutBuilder,
-    TreeMut,
+    ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Recorder, SparseTree, SparseTreeMut,
+    TreeDBBuilder, TreeDBMutBuilder,
 };
 
 use hash256_std_hasher::Hash256StdHasher;
@@ -209,7 +209,7 @@ fn tree_db_mut_test_commit() {
     let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
 
     let key = Key::<TREE_DEPTH>::new(&[10]);
-    let new_value = Sha3::hash(b"new").to_vec();
+    let new_value = b"new_value".to_vec();
 
     let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
 
@@ -217,7 +217,7 @@ fn tree_db_mut_test_commit() {
     assert_eq!(old_value, None);
 
     let key = Key::<TREE_DEPTH>::new(&[0]);
-    let new_value = Sha3::hash(b"new1").to_vec();
+    let new_value = b"new1".to_vec();
 
     let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
 
@@ -228,5 +228,24 @@ fn tree_db_mut_test_commit() {
 
     let key = Key::<TREE_DEPTH>::new(&[10]);
     let value = tree_db_mut.value(&key).unwrap();
-    println!("value: {:?}", value);
+
+    assert_eq!(value, Some(b"new_value".to_vec()));
+}
+
+#[test]
+fn tree_db_mut_test_proof() {
+    let (mut db, mut root) = mock_data();
+    let mut recorder = Recorder::<Sha3>::new();
+    let tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+        .with_recorder(&mut recorder)
+        .build();
+
+    let key = Key::<TREE_DEPTH>::new(&[0]);
+    let value = tree_db_mut.value(&key).unwrap();
+    assert_eq!(value, Some(TEST_VALUE.to_vec()));
+
+    let storage_proof = recorder.drain_storage_proof();
+    let mem_db = storage_proof.into_memory_db::<Sha3>();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&mem_db, &root).build();
+    assert_eq!(tree.value(&key).unwrap(), Some(TEST_VALUE.to_vec()));
 }

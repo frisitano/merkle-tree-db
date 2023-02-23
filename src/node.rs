@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use super::{DBValue, Hasher, TreeError};
 
 // NodeHash
@@ -64,12 +66,14 @@ impl<H: Hasher> Default for NodeHash<H> {
     }
 }
 
-/// Implement AsRef<H::Out> for NodeHash
-// impl<H: Hasher> AsRef<H::Out> for NodeHash<H> {
-//     fn as_ref(&self) -> &H::Out {
-//         self.hash()
-//     }
-// }
+/// Implement Deref for NodeHash
+impl<H: Hasher> Deref for NodeHash<H> {
+    type Target = H::Out;
+
+    fn deref(&self) -> &Self::Target {
+        self.hash()
+    }
+}
 
 // Node
 // ================================================================================================

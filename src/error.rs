@@ -4,8 +4,13 @@ pub enum TreeError {
     DataNotFound,
     DecodeNodeFailed,
     DecodeHashFailed,
-    InvalidHeight,
     InconsistentDefaultHashes,
     MissingChild,
     UnexpectedNodeType,
+    KeyError(KeyError),
+}
+
+#[derive(Debug)]
+pub enum KeyError {
+    KeyTooLarge(usize, usize),
 }

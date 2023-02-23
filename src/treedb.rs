@@ -1,6 +1,6 @@
 use hash_db::{HashDBRef, EMPTY_PREFIX};
 
-use super::{ChildSelector, DBValue, Hasher, Key, Node, Tree, TreeError};
+use super::{ChildSelector, DBValue, Hasher, Key, Node, SparseTree, TreeError};
 
 // TreeDBBuilder
 // ================================================================================================
@@ -108,7 +108,7 @@ impl<'db, const D: usize, H: Hasher> TreeDB<'db, D, H> {
 }
 
 /// Tree implementation for TreeDB
-impl<'db, H: Hasher, const N: usize> Tree<H, N> for TreeDB<'db, N, H> {
+impl<'db, H: Hasher, const N: usize> SparseTree<H, N> for TreeDB<'db, N, H> {
     /// Returns a reference to the root hash
     fn root(&self) -> &H::Out {
         self.root

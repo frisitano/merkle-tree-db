@@ -317,7 +317,11 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let mut proof = Some(Vec::new());
         match self.lookup_leaf_node(&key, &mut proof)? {
-            Some(_) => Ok(Some(proof.unwrap())),
+            Some(_) => {
+                let mut proof = proof.unwrap();
+                proof.reverse();
+                Ok(Some(proof))
+            }
             None => Ok(None),
         }
     }

@@ -1,6 +1,6 @@
 use super::{
-    ChildSelector, DBValue, HashMap, Hasher, Key, Node, NodeHash, NodeStorage, SparseTreeMut,
-    TreeError, TreeRecorder,
+    null_nodes, ChildSelector, DBValue, DataError, HashMap, Hasher, Key, KeyedTreeMut, Node,
+    NodeHash, NodeStorage, TreeError, TreeRecorder,
 };
 use core::cmp::Ordering;
 use hash_db::{HashDB, EMPTY_PREFIX};
@@ -19,12 +19,18 @@ pub struct TreeDBMutBuilder<'db, const D: usize, H: Hasher> {
 /// Implementation of a TreeDBMutBuilder
 impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
     /// Construct a new db builder
-    pub fn new(db: &'db mut dyn HashDB<H, DBValue>, root: &'db mut H::Out) -> Self {
-        Self {
+    pub fn new(
+        db: &'db mut dyn HashDB<H, DBValue>,
+        root: &'db mut H::Out,
+    ) -> Result<Self, TreeError> {
+        if D > usize::MAX / 8 {
+            return Err(TreeError::DepthTooLarge(D, usize::MAX / 8));
+        }
+        Ok(Self {
             db,
             root,
             recorder: None,
-        }
+        })
     }
 
     /// Add a recorder to the db buidler
@@ -117,23 +123,16 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         self.root_handle = NodeHash::Database(*self.root);
     }
 
-    fn lookup(
-        &self,
-        node_hash: &NodeHash<H>,
-        proof: &mut Option<Vec<Node<H>>>,
-    ) -> Result<Node<H>, TreeError> {
+    fn lookup(&self, node_hash: &NodeHash<H>) -> Result<Node<H>, TreeError> {
         let node = match node_hash {
-            NodeHash::InMemory(hash) => self
-                .storage
-                .get(hash)
-                .cloned()
-                .ok_or(TreeError::DataNotFound),
+            NodeHash::InMemory(hash) => self.storage.get(hash).cloned().ok_or(
+                TreeError::DataError(DataError::InMemoryDataNotFound(hash.as_ref().to_vec())),
+            ),
             NodeHash::Database(hash) => {
-                let data = self
-                    .db
-                    .get(hash, EMPTY_PREFIX)
-                    .ok_or(TreeError::DataNotFound)?;
-                let node: Node<H> = data.try_into()?;
+                let data = self.db.get(hash, EMPTY_PREFIX).ok_or(TreeError::DataError(
+                    DataError::DatabaseDataNotFound(hash.as_ref().to_vec()),
+                ))?;
+                let node: Node<H> = data.try_into().map_err(TreeError::NodeError)?;
 
                 if let Some(recorder) = self.recorder.as_ref() {
                     recorder.borrow_mut().record(&node);
@@ -141,16 +140,15 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
 
                 Ok(node)
             }
-            NodeHash::Default(hash) => self
-                .null_nodes
-                .get(hash)
-                .cloned()
-                .ok_or(TreeError::DataNotFound),
+            NodeHash::Default(hash) => {
+                self.null_nodes
+                    .get(hash)
+                    .cloned()
+                    .ok_or(TreeError::DataError(DataError::NullNodeDataNotFound(
+                        hash.as_ref().to_vec(),
+                    )))
+            }
         }?;
-
-        if let Some(proof) = proof.as_mut() {
-            proof.push(node.clone());
-        }
 
         Ok(node)
     }
@@ -158,17 +156,28 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
     fn lookup_leaf_node(
         &self,
         key: &Key<D>,
-        proof: &mut Option<Vec<Node<H>>>,
+        proof: &mut Option<Vec<DBValue>>,
     ) -> Result<Option<Node<H>>, TreeError> {
-        let mut current_node = self.lookup(&self.root_handle, proof)?;
+        let mut current_node = self.lookup(&self.root_handle)?;
 
         for bit in key.iter() {
-            let child_hash = current_node.child_hash(&ChildSelector::new(bit))?;
+            let child_selector = ChildSelector::new(bit);
+            let child_hash = current_node
+                .child_hash(&child_selector)
+                .map_err(TreeError::NodeError)?;
             if child_hash.is_default() && proof.is_none() {
                 return Ok(None);
             }
 
-            current_node = self.lookup(child_hash, proof)?;
+            // store the sibling hash in the proof
+            if let Some(proof) = proof.as_mut() {
+                let sibling_hash: H::Out = **current_node
+                    .child_hash(&child_selector.sibling())
+                    .map_err(TreeError::NodeError)?;
+                proof.push(sibling_hash.as_ref().to_vec());
+            }
+
+            current_node = self.lookup(child_hash)?;
         }
 
         Ok(Some(current_node))
@@ -198,17 +207,20 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         current_hash: &NodeHash<H>,
         key: &Key<D>,
         value: &[u8],
-        key_index: u8,
+        key_index: usize,
     ) -> Result<(Node<H>, Option<DBValue>, bool), TreeError> {
         // If we have reached the leaf node, create a new leaf node with the specified value.
-        if key_index == (D * 8) as u8 {
+        if key_index == D * 8 {
             let node = Node::new_value(value);
 
             // fetch the old node if it exists
             let old_node = match current_hash {
-                NodeHash::InMemory(_) | NodeHash::Database(_) => {
-                    Some(self.lookup(current_hash, &mut None)?.value()?.clone())
-                }
+                NodeHash::InMemory(_) | NodeHash::Database(_) => Some(
+                    self.lookup(current_hash)?
+                        .value()
+                        .map_err(TreeError::NodeError)?
+                        .clone(),
+                ),
                 NodeHash::Default(_) => None,
             };
 
@@ -228,11 +240,14 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         }
 
         // If we have not reached the leaf node lookup the current node.
-        let mut current_node = self.lookup(current_hash, &mut None)?;
+        let mut current_node = self.lookup(current_hash)?;
 
         // Select the appropriate child based on the key bit at the current index and lookup.
-        let child_selector = ChildSelector::new(key.bit(key_index));
-        let child_hash = current_node.child_hash(&child_selector)?;
+        let bit = key.bit(key_index).map_err(TreeError::KeyError)?;
+        let child_selector = ChildSelector::new(bit);
+        let child_hash = current_node
+            .child_hash(&child_selector)
+            .map_err(TreeError::NodeError)?;
 
         let (child_node, old_node, changed) =
             self.insert_at(child_hash, key, value, key_index + 1)?;
@@ -246,7 +261,9 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         } else {
             NodeHash::InMemory(*child_node.hash())
         };
-        current_node.set_child_hash(&child_selector, child_hash)?;
+        current_node
+            .set_child_hash(&child_selector, child_hash)
+            .map_err(TreeError::NodeError)?;
 
         if !current_node.is_default() {
             self.storage.insert(current_node.clone());
@@ -269,7 +286,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
 }
 
 /// Implementation of a TreeDBMut
-impl<'db, const N: usize, H: Hasher> SparseTreeMut<H, N> for TreeDBMut<'db, N, H> {
+impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H> {
     /// Return the root of the tree
     fn root(&mut self) -> &H::Out {
         self.commit();
@@ -278,33 +295,37 @@ impl<'db, const N: usize, H: Hasher> SparseTreeMut<H, N> for TreeDBMut<'db, N, H
 
     /// Iterates through the key and fetches the specified child hash for each inner
     /// node until we reach the leaf node. Returns the value associated with the leaf node.
-    fn value(&self, key: &Key<N>) -> Result<Option<DBValue>, TreeError> {
-        let node = self.lookup_leaf_node(key, &mut None)?;
+    fn value(&self, key: &[u8]) -> Result<Option<DBValue>, TreeError> {
+        let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
+        let node = self.lookup_leaf_node(&key, &mut None)?;
         match node {
-            Some(node) => Ok(Some(node.value()?.clone())),
+            Some(node) => Ok(Some(node.value().map_err(TreeError::NodeError)?.clone())),
             None => Ok(None),
         }
     }
 
-    fn leaf(&self, key: &Key<N>) -> Result<Option<H::Out>, TreeError> {
-        let node = self.lookup_leaf_node(key, &mut None)?;
+    fn leaf(&self, key: &[u8]) -> Result<Option<H::Out>, TreeError> {
+        let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
+        let node = self.lookup_leaf_node(&key, &mut None)?;
         match node {
             Some(node) => Ok(Some(*node.hash())),
             None => Ok(None),
         }
     }
 
-    fn proof(&self, key: &Key<N>) -> Result<Option<Vec<Node<H>>>, TreeError> {
+    fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError> {
+        let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let mut proof = Some(Vec::new());
-        match self.lookup_leaf_node(key, &mut proof)? {
+        match self.lookup_leaf_node(&key, &mut proof)? {
             Some(_) => Ok(Some(proof.unwrap())),
             None => Ok(None),
         }
     }
 
-    fn insert(&mut self, key: &Key<N>, value: DBValue) -> Result<Option<DBValue>, TreeError> {
+    fn insert(&mut self, key: &[u8], value: DBValue) -> Result<Option<DBValue>, TreeError> {
+        let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let current_root = self.root_handle.clone();
-        let (new_root, old_node, changed) = self.insert_at(&current_root, key, &value, 0)?;
+        let (new_root, old_node, changed) = self.insert_at(&current_root, &key, &value, 0)?;
 
         if changed {
             self.remove_node(&current_root);
@@ -315,39 +336,31 @@ impl<'db, const N: usize, H: Hasher> SparseTreeMut<H, N> for TreeDBMut<'db, N, H
         Ok(old_node)
     }
 
-    fn remove(&mut self, key: &Key<N>) -> Result<Option<DBValue>, TreeError> {
+    fn remove(&mut self, key: &[u8]) -> Result<Option<DBValue>, TreeError> {
         self.insert(key, vec![])
     }
-}
 
-// Helpers
-// ================================================================================================
-
-/// Return the HashMap hashing node hash to Node for null nodes of a tree of depth D
-pub fn null_nodes<H: Hasher>(depth: usize) -> HashMap<H::Out, Node<H>> {
-    let mut hashes = HashMap::with_capacity(depth);
-    let mut current_hash = H::hash(&[]);
-
-    hashes.insert(
-        current_hash,
-        Node::Value {
-            hash: current_hash,
-            value: vec![],
-        },
-    );
-
-    for _ in 1..depth {
-        let next_hash = H::hash(&[current_hash.as_ref(), current_hash.as_ref()].concat());
-        hashes.insert(
-            next_hash,
-            Node::Inner {
-                hash: next_hash,
-                left: NodeHash::Default(current_hash),
-                right: NodeHash::Default(current_hash),
-            },
-        );
-        current_hash = next_hash;
+    fn verify(
+        key: &[u8],
+        value: &[u8],
+        proof: &[DBValue],
+        root: &H::Out,
+    ) -> Result<bool, TreeError> {
+        let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
+        let mut hash = H::hash(value);
+        // iterate over the bits in the key in reverse order
+        for (bit, sibling) in (0..D * 8).rev().zip(proof.iter()) {
+            let bit = key.bit(bit).map_err(TreeError::KeyError)?;
+            let child_selector = ChildSelector::new(bit);
+            match child_selector {
+                ChildSelector::Left => {
+                    hash = H::hash(&[hash.as_ref(), sibling].concat());
+                }
+                ChildSelector::Right => {
+                    hash = H::hash(&[sibling, hash.as_ref()].concat());
+                }
+            }
+        }
+        Ok(hash == *root)
     }
-
-    hashes
 }

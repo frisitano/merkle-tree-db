@@ -1,5 +1,5 @@
 use super::{
-    ChildSelector, DBValue, Hasher, Key, Node, NodeHash, Recorder, SparseTree, SparseTreeMut,
+    ChildSelector, DBValue, Hasher, KeyedTree, KeyedTreeMut, Node, NodeHash, Recorder, TreeDB,
     TreeDBBuilder, TreeDBMutBuilder,
 };
 
@@ -130,45 +130,38 @@ fn simple_node_update() {
 #[test]
 fn tree_db_get_value() {
     let (db, root) = mock_data();
-    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root).build();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root)
+        .expect("valid tree depth provided")
+        .build();
 
-    let key = Key::<TREE_DEPTH>::new(&[0]);
-    assert_eq!(tree.value(&key).unwrap(), Some(TEST_VALUE.to_vec()));
-
-    let key = Key::<TREE_DEPTH>::new(&[1]);
-    assert_eq!(tree.value(&key).unwrap(), None);
+    assert_eq!(tree.value(&[0]).unwrap(), Some(TEST_VALUE.to_vec()));
+    assert_eq!(tree.value(&[1]).unwrap(), None);
 }
 
 #[test]
 fn tree_db_proof() {
     let (db, root) = mock_data();
-    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root).build();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root)
+        .expect("valid tree depth provided")
+        .build();
 
-    let key = Key::<TREE_DEPTH>::new(&[0]);
-    let proof = tree.proof(&key).unwrap().unwrap();
+    let proof = tree.proof(&[0]).unwrap().unwrap();
 
-    assert_eq!(proof.len(), TREE_DEPTH * 8 + 1);
-    assert_eq!(
-        proof[proof.len() - 1].value().unwrap(),
-        &TEST_VALUE.to_vec()
-    );
-    assert_eq!(proof[0].hash().as_ref(), &root);
+    assert_eq!(proof.len(), TREE_DEPTH * 8);
 
-    for i in (1..proof.len()).rev() {
-        let node = &proof[i];
-        let parent = &proof[i - 1];
-        let child_selector = ChildSelector::new(key.bit((i - 1) as u8));
-        assert_eq!(
-            node.hash().as_ref(),
-            parent.child_hash(&child_selector).unwrap().hash()
-        );
-    }
+    assert!(TreeDB::<1, Sha3>::verify(&[0], &TEST_VALUE, &proof, &root).unwrap());
+    assert!(!TreeDB::<1, Sha3>::verify(&[0], b"incorrect_value", &proof, &root).unwrap());
+
+    let non_inclusion_proof = tree.proof(&[1]).unwrap().unwrap();
+    assert!(TreeDB::<1, Sha3>::verify(&[1], &[], &non_inclusion_proof, &root).unwrap());
 }
 
 #[test]
 fn tree_depth() {
     let (db, root) = mock_data();
-    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root).build();
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&db, &root)
+        .expect("valid tree depth provided")
+        .build();
 
     assert_eq!(tree.depth(), TREE_DEPTH * 8);
 }
@@ -176,58 +169,58 @@ fn tree_depth() {
 #[test]
 fn tree_db_mut_insert() {
     let (mut db, mut root) = mock_data();
-    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
+    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+        .expect("valid tree depth provided")
+        .build();
 
-    let key = Key::<TREE_DEPTH>::new(&[0]);
     let new_value = Sha3::hash(b"new").to_vec();
 
-    let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
+    let old_value = tree_db_mut.insert(&[0], new_value.clone()).unwrap();
 
-    assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+    assert_eq!(tree_db_mut.value(&[0]).unwrap(), Some(new_value));
     assert_eq!(old_value, Some(TEST_VALUE.to_vec()));
 }
 
 #[test]
 fn tree_db_mut_remove() {
     let (mut db, mut root) = mock_data();
-    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
+    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+        .expect("valid tree depth provided")
+        .build();
 
-    let key = Key::<TREE_DEPTH>::new(&[0]);
-    let old_value = tree_db_mut.remove(&key).unwrap();
+    let old_value = tree_db_mut.remove(&[0]).unwrap();
 
-    assert_eq!(tree_db_mut.value(&key).unwrap(), None);
+    assert_eq!(tree_db_mut.value(&[0]).unwrap(), None);
     assert_eq!(old_value, Some(TEST_VALUE.to_vec()));
 
-    let key = Key::<TREE_DEPTH>::new(&[122]);
-    let old_value = tree_db_mut.remove(&key).unwrap();
+    let old_value = tree_db_mut.remove(&[122]).unwrap();
     assert_eq!(old_value, None);
 }
 
 #[test]
 fn tree_db_mut_test_commit() {
     let (mut db, mut root) = mock_data();
-    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root).build();
+    let mut tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+        .expect("valid tree depth provided")
+        .build();
 
-    let key = Key::<TREE_DEPTH>::new(&[10]);
     let new_value = b"new_value".to_vec();
 
-    let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
+    let old_value = tree_db_mut.insert(&[10], new_value.clone()).unwrap();
 
-    assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+    assert_eq!(tree_db_mut.value(&[10]).unwrap(), Some(new_value));
     assert_eq!(old_value, None);
 
-    let key = Key::<TREE_DEPTH>::new(&[0]);
     let new_value = b"new1".to_vec();
 
-    let old_value = tree_db_mut.insert(&key, new_value.clone()).unwrap();
+    let old_value = tree_db_mut.insert(&[0], new_value.clone()).unwrap();
 
-    assert_eq!(tree_db_mut.value(&key).unwrap(), Some(new_value));
+    assert_eq!(tree_db_mut.value(&[0]).unwrap(), Some(new_value));
     assert_eq!(old_value, Some(TEST_VALUE.to_vec()));
 
     tree_db_mut.commit();
 
-    let key = Key::<TREE_DEPTH>::new(&[10]);
-    let value = tree_db_mut.value(&key).unwrap();
+    let value = tree_db_mut.value(&[10]).unwrap();
 
     assert_eq!(value, Some(b"new_value".to_vec()));
 }
@@ -237,15 +230,17 @@ fn tree_db_mut_test_proof() {
     let (mut db, mut root) = mock_data();
     let mut recorder = Recorder::<Sha3>::new();
     let tree_db_mut = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+        .expect("valid tree depth provided")
         .with_recorder(&mut recorder)
         .build();
 
-    let key = Key::<TREE_DEPTH>::new(&[0]);
-    let value = tree_db_mut.value(&key).unwrap();
+    let value = tree_db_mut.value(&[0]).unwrap();
     assert_eq!(value, Some(TEST_VALUE.to_vec()));
 
     let storage_proof = recorder.drain_storage_proof();
     let mem_db = storage_proof.into_memory_db::<Sha3>();
-    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&mem_db, &root).build();
-    assert_eq!(tree.value(&key).unwrap(), Some(TEST_VALUE.to_vec()));
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&mem_db, &root)
+        .expect("valid tree depth provided")
+        .build();
+    assert_eq!(tree.value(&[0]).unwrap(), Some(TEST_VALUE.to_vec()));
 }

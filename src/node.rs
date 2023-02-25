@@ -1,6 +1,5 @@
-use std::ops::Deref;
-
-use super::{DBValue, Hasher, TreeError};
+use super::{DBValue, Hasher, NodeError};
+use core::ops::Deref;
 
 // NodeHash
 // ================================================================================================
@@ -21,6 +20,16 @@ pub enum NodeHash<H: Hasher> {
 }
 
 impl<H: Hasher> core::fmt::Debug for NodeHash<H> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NodeHash::InMemory(hash) => write!(f, "InMemory({hash:?})"),
+            NodeHash::Database(hash) => write!(f, "Database({hash:?})"),
+            NodeHash::Default(hash) => write!(f, "Default({hash:?})"),
+        }
+    }
+}
+
+impl<H: Hasher> core::fmt::Display for NodeHash<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NodeHash::InMemory(hash) => write!(f, "InMemory({hash:?})"),
@@ -94,6 +103,13 @@ impl ChildSelector {
             ChildSelector::Left
         }
     }
+
+    pub fn sibling(&self) -> Self {
+        match self {
+            ChildSelector::Left => ChildSelector::Right,
+            ChildSelector::Right => ChildSelector::Left,
+        }
+    }
 }
 
 /// Node is used to store the data of a node. A value node stores the value and leaf hash. An inner
@@ -144,14 +160,14 @@ impl<H: Hasher> Node<H> {
     }
 
     /// Constructs a new inner node
-    pub fn new_inner(left: NodeHash<H>, right: NodeHash<H>) -> Result<Self, TreeError> {
+    pub fn new_inner(left: NodeHash<H>, right: NodeHash<H>) -> Result<Self, NodeError> {
         // if both left and right are default hashes that do not match, return an error
         if matches!(
             (&left, &right),
             (NodeHash::Default(_), NodeHash::Default(_))
         ) && left.hash() != right.hash()
         {
-            return Err(TreeError::InconsistentDefaultHashes);
+            return Err(NodeError::InconsistentDefaultHashes);
         }
 
         let hash = H::hash(&[left.hash().as_ref(), right.hash().as_ref()].concat());
@@ -166,9 +182,12 @@ impl<H: Hasher> Node<H> {
     /// valid for inner nodes.
     /// Errors:
     /// - UnexpectedNodeType: if the node is a value node
-    pub fn child_hash(&self, child: &ChildSelector) -> Result<&NodeHash<H>, TreeError> {
+    pub fn child_hash(&self, child: &ChildSelector) -> Result<&NodeHash<H>, NodeError> {
         match self {
-            Node::Value { hash: _, value: _ } => Err(TreeError::UnexpectedNodeType),
+            Node::Value { hash: _, value: _ } => Err(NodeError::InvalidNodeType(
+                "Value".to_string(),
+                "Inner".to_string(),
+            )),
             Node::Inner {
                 hash: _,
                 left,
@@ -184,14 +203,17 @@ impl<H: Hasher> Node<H> {
     /// nodes.
     /// Errors:
     /// - UnexpectedNodeType: if the node is an inner node
-    pub fn value(&self) -> Result<&DBValue, TreeError> {
+    pub fn value(&self) -> Result<&DBValue, NodeError> {
         match self {
             Node::Value { hash: _, value } => Ok(value),
             Node::Inner {
                 hash: _,
                 left: _,
                 right: _,
-            } => Err(TreeError::UnexpectedNodeType),
+            } => Err(NodeError::InvalidNodeType(
+                "Inner".to_string(),
+                "Value".to_string(),
+            )),
         }
     }
 
@@ -228,9 +250,12 @@ impl<H: Hasher> Node<H> {
         &mut self,
         child: &ChildSelector,
         child_hash: NodeHash<H>,
-    ) -> Result<(), TreeError> {
+    ) -> Result<(), NodeError> {
         match self {
-            Node::Value { hash: _, value: _ } => Err(TreeError::UnexpectedNodeType),
+            Node::Value { hash: _, value: _ } => Err(NodeError::InvalidNodeType(
+                "Value".to_string(),
+                "Inner".to_string(),
+            )),
             Node::Inner { hash, left, right } => match child {
                 ChildSelector::Left => {
                     *left = child_hash;
@@ -326,14 +351,14 @@ impl<H: Hasher> From<Node<H>> for Vec<u8> {
 /// The second byte of the vector is used to determine the height of the node, as such the maximum
 /// height of the tree is 256.
 impl<H: Hasher> TryFrom<Vec<u8>> for Node<H> {
-    type Error = TreeError;
+    type Error = NodeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         match value.first() {
             // Construct Value node
             Some(0) => {
                 if value.len() == 1 {
-                    return Err(TreeError::DecodeNodeFailed);
+                    return Err(NodeError::DecodeNodeEmptyValue);
                 }
 
                 Ok(Node::new_value(&value[1..]))
@@ -341,8 +366,13 @@ impl<H: Hasher> TryFrom<Vec<u8>> for Node<H> {
             // Construct Inner node when both children are not default
             Some(inner_node_type) => {
                 // Length of byte vector should be 2 * H::Length + 1
-                if value.len() != 2 * H::LENGTH + 1 {
-                    return Err(TreeError::DecodeNodeFailed);
+                let expected_length = 2 * H::LENGTH + 1;
+                let actual_length = value.len();
+                if actual_length != expected_length {
+                    return Err(NodeError::DecodeNodeInvalidLength(
+                        value.len(),
+                        2 * H::LENGTH + 1,
+                    ));
                 }
 
                 // Decode and construct inner node
@@ -361,10 +391,10 @@ impl<H: Hasher> TryFrom<Vec<u8>> for Node<H> {
                         NodeHash::Default(left_hash),
                         NodeHash::Database(right_hash),
                     ),
-                    _ => Err(TreeError::DecodeNodeFailed),
+                    _ => Err(NodeError::DecodeNodeInvalidPrefix(*inner_node_type)),
                 }
             }
-            _ => Err(TreeError::DecodeNodeFailed),
+            _ => Err(NodeError::DecodeNodeNoData),
         }
     }
 }
@@ -376,9 +406,9 @@ impl<H: Hasher> TryFrom<Vec<u8>> for Node<H> {
 ///
 /// Errors:
 /// - DecodeHashFailed: if the byte vector is not exactly H::LENGTH bytes long
-fn decode_hash<H: Hasher>(data: &[u8]) -> Result<H::Out, TreeError> {
+fn decode_hash<H: Hasher>(data: &[u8]) -> Result<H::Out, NodeError> {
     if data.len() != H::LENGTH {
-        return Err(TreeError::DecodeHashFailed);
+        return Err(NodeError::DecodeNodeHashFailed(data.to_vec()));
     }
     let mut hash = H::Out::default();
     hash.as_mut().copy_from_slice(data);

@@ -133,7 +133,7 @@ pub trait TreeRecorder<H: Hasher> {
 // ================================================================================================
 
 /// Return the HashMap hashing node hash to Node for null nodes of a tree of depth D
-pub fn null_nodes<H: Hasher>(depth: usize) -> HashMap<H::Out, Node<H>> {
+pub fn null_nodes<H: Hasher>(depth: usize) -> (HashMap<H::Out, Node<H>>, H::Out) {
     let mut hashes = HashMap::with_capacity(depth);
     let mut current_hash = H::hash(&[]);
 
@@ -145,7 +145,7 @@ pub fn null_nodes<H: Hasher>(depth: usize) -> HashMap<H::Out, Node<H>> {
         },
     );
 
-    for _ in 1..depth {
+    for _ in 0..depth {
         let next_hash = H::hash(&[current_hash.as_ref(), current_hash.as_ref()].concat());
         hashes.insert(
             next_hash,
@@ -158,5 +158,5 @@ pub fn null_nodes<H: Hasher>(depth: usize) -> HashMap<H::Out, Node<H>> {
         current_hash = next_hash;
     }
 
-    hashes
+    (hashes, current_hash)
 }

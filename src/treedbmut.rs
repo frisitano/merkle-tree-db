@@ -49,14 +49,19 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
 
     /// Consumes the builder and returns a TreeDBMut
     pub fn build(self) -> TreeDBMut<'db, D, H> {
-        let root_handle = NodeHash::Database(*self.root);
+        let (null_nodes, default_root) = null_nodes::<H>(D * 8);
+        let root_handle = if self.root == &H::Out::default() || self.root == &default_root {
+            NodeHash::Default(default_root)
+        } else {
+            NodeHash::Database(*self.root)
+        };
         TreeDBMut {
             storage: NodeStorage::empty(),
             death_row: HashMap::new(),
             db: self.db,
             root: self.root,
             root_handle,
-            null_nodes: null_nodes::<H>(D * 8),
+            null_nodes,
             recorder: self.recorder.map(core::cell::RefCell::new),
         }
     }
@@ -118,7 +123,9 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         }
 
         *self.root = *self.root_handle.hash();
-        self.root_handle = NodeHash::Database(*self.root);
+        if !self.root_handle.is_default() {
+            self.root_handle = NodeHash::Database(*self.root);
+        }
     }
 
     fn lookup(&self, node_hash: &NodeHash<H>) -> Result<Node<H>, TreeError> {

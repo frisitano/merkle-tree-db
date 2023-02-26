@@ -19,6 +19,7 @@ pub struct TreeDBBuilder<'db, const D: usize, H: Hasher> {
 impl<'db, const D: usize, H: Hasher> TreeDBBuilder<'db, D, H> {
     /// Construct a new db builder
     pub fn new(db: &'db dyn HashDBRef<H, DBValue>, root: &'db H::Out) -> Result<Self, TreeError> {
+        //TODO: warm user if default root provided
         if D > usize::MAX / 8 {
             return Err(TreeError::DepthTooLarge(D, usize::MAX / 8));
         }
@@ -46,11 +47,17 @@ impl<'db, const D: usize, H: Hasher> TreeDBBuilder<'db, D, H> {
 
     /// build a TreeDB
     pub fn build(self) -> TreeDB<'db, D, H> {
+        let (null_nodes, default_root) = null_nodes::<H>(D * 8);
+        let root = if self.root == &H::Out::default() || self.root == &default_root {
+            NodeHash::Default(default_root)
+        } else {
+            NodeHash::Database(*self.root)
+        };
         TreeDB {
             db: self.db,
-            root: self.root,
+            root,
             recorder: self.recorder.map(core::cell::RefCell::new),
-            null_nodes: null_nodes::<H>(D * 8),
+            null_nodes,
         }
     }
 }
@@ -61,7 +68,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBBuilder<'db, D, H> {
 /// TreeDB use to access binary merkle tree from a db backend
 pub struct TreeDB<'db, const D: usize, H: Hasher> {
     db: &'db dyn HashDBRef<H, DBValue>,
-    root: &'db H::Out,
+    root: NodeHash<H>,
     null_nodes: HashMap<H::Out, Node<H>>,
     recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
@@ -108,7 +115,7 @@ impl<'db, const D: usize, H: Hasher> TreeDB<'db, D, H> {
         key: &Key<D>,
         proof: &mut Option<Vec<DBValue>>,
     ) -> Result<Option<Node<H>>, TreeError> {
-        let mut current_node = self.lookup(&NodeHash::<H>::Database(*self.root))?;
+        let mut current_node = self.lookup(&self.root)?;
 
         for bit in key.iter() {
             let child_selector = ChildSelector::new(bit);
@@ -138,7 +145,7 @@ impl<'db, const D: usize, H: Hasher> TreeDB<'db, D, H> {
 impl<'db, H: Hasher, const D: usize> KeyedTree<H, D> for TreeDB<'db, D, H> {
     /// Returns a reference to the root hash
     fn root(&self) -> &H::Out {
-        self.root
+        &self.root
     }
 
     /// Iterates through the key and fetches the specified child hash for each inner

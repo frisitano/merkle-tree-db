@@ -244,3 +244,62 @@ fn tree_db_mut_test_proof() {
         .build();
     assert_eq!(tree.value(&[0]).unwrap(), Some(TEST_VALUE.to_vec()));
 }
+
+#[test]
+fn test_consistency_with_rs_merkle() {
+    use rs_merkle::{algorithms::Sha256, Hasher as HASHER_RS, MerkleTree};
+    use sha2::{digest::FixedOutput, Digest as sha2Digest, Sha256 as Sha256_};
+    // SHA2 MOCK
+    // ============================================================================================
+    pub struct Sha2;
+
+    impl Hasher for Sha2 {
+        type Out = [u8; 32];
+
+        type StdHasher = Hash256StdHasher;
+
+        const LENGTH: usize = 32;
+
+        fn hash(data: &[u8]) -> Self::Out {
+            let mut hasher = Sha256_::new();
+            hasher.update(data);
+            <[u8; 32]>::from(hasher.finalize_fixed())
+        }
+    }
+
+    // TESTS
+    // ============================================================================================
+
+    // create an empty in memory db
+    let mut db = MemoryDB::<Sha2, NoopKey<Sha2>, DBValue>::default();
+
+    // create a default root
+    let mut root = <Sha2 as Hasher>::Out::default();
+
+    // create a mutable tree
+    let mut tree = TreeDBMutBuilder::<1, Sha2>::new(&mut db, &mut root)
+        .expect("valid tree depth provided")
+        .build();
+
+    // insert some values
+    tree.insert(&[1], b"1".to_vec()).unwrap();
+    tree.insert(&[255], b"flip flop".to_vec()).unwrap();
+
+    // CONSISTENCY MOCKS
+    // ============================================================================================
+    // here we construct a merkle tree using the same values as the tree we just created using
+    // rs_merkle merkle tree implementation
+    let mut leaves = (0..256)
+        .into_iter()
+        .map(|_| Sha256::hash(b""))
+        .collect::<Vec<_>>();
+    leaves[1] = Sha256::hash(b"1");
+    leaves[255] = Sha256::hash(b"flip flop");
+    let merkle_tree = MerkleTree::<Sha256>::from_leaves(&leaves);
+    let consistency_root = merkle_tree.root().unwrap();
+
+    // CONSISTENCY TEST
+    // ============================================================================================
+    // Assert consistency of roots
+    assert_eq!(&consistency_root, tree.root())
+}

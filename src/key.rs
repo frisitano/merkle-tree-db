@@ -22,16 +22,6 @@ impl<const N: usize> Key<N> {
         Ok(Key(key))
     }
 
-    /// Create a zero key
-    pub const fn zero() -> Self {
-        Self([0u8; N])
-    }
-
-    /// Returns true if the key is the zero key, false otherwise
-    pub fn is_zero(&self) -> bool {
-        self == &Key::zero()
-    }
-
     /// Returns the bit at the i'th index of the key
     pub fn bit(&self, i: usize) -> Result<bool, KeyError> {
         let byte_pos = i / BYTE_SIZE;
@@ -54,14 +44,6 @@ impl<const N: usize> Key<N> {
         KeyIter {
             key: self,
             element: 0,
-        }
-    }
-
-    /// Returns an iterator over the key from the i'th index
-    pub fn iter_from(&self, i: usize) -> KeyIter<'_, N> {
-        KeyIter {
-            key: self,
-            element: i,
         }
     }
 }

@@ -58,9 +58,4 @@ impl<H: Hasher> NodeStorage<H> {
     pub fn drain(&mut self) -> hashbrown::hash_map::Drain<H::Out, (Node<H>, usize)> {
         self.nodes.drain()
     }
-
-    /// consume the `NodeStorage` and returns the inner `HashMap`
-    pub fn inner(self) -> HashMap<H::Out, (Node<H>, usize)> {
-        self.nodes
-    }
 }

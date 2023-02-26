@@ -63,7 +63,6 @@ pub struct TreeDB<'db, const D: usize, H: Hasher> {
     db: &'db dyn HashDBRef<H, DBValue>,
     root: &'db H::Out,
     null_nodes: HashMap<H::Out, Node<H>>,
-    // depth: usize,
     recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
 

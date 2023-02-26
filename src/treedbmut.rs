@@ -1,6 +1,6 @@
 use super::{
-    null_nodes, ChildSelector, DBValue, DataError, HashMap, Hasher, Key, KeyedTreeMut, Node,
-    NodeHash, NodeStorage, TreeError, TreeRecorder,
+    null_nodes, ChildSelector, DBValue, DataError, HashDBRef, HashMap, Hasher, Key, KeyedTreeMut,
+    Node, NodeHash, NodeStorage, TreeError, TreeRecorder,
 };
 use core::cmp::Ordering;
 use hash_db::{HashDB, EMPTY_PREFIX};
@@ -12,7 +12,6 @@ use hash_db::{HashDB, EMPTY_PREFIX};
 pub struct TreeDBMutBuilder<'db, const D: usize, H: Hasher> {
     db: &'db mut dyn HashDB<H, DBValue>,
     root: &'db mut H::Out,
-    // depth: usize,
     recorder: Option<&'db mut dyn TreeRecorder<H>>,
 }
 
@@ -74,7 +73,6 @@ pub struct TreeDBMut<'db, const D: usize, H: Hasher> {
     root: &'db mut H::Out,
     root_handle: NodeHash<H>,
     null_nodes: HashMap<H::Out, Node<H>>,
-    // depth: usize,
     recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
 

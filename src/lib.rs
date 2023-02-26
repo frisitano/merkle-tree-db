@@ -12,21 +12,33 @@ mod tree;
 mod treedb;
 mod treedbmut;
 
-use hashbrown::{HashMap, HashSet};
-
-pub use error::{DataError, KeyError, NodeError, TreeError};
-pub use hash_db::Hasher;
-pub use key::Key;
-pub use node::{ChildSelector, Node, NodeHash};
-pub use proof::StorageProof;
-pub use recorder::Recorder;
-pub use storage::NodeStorage;
-pub use tree::{null_nodes, IndexTree, IndexTreeMut, KeyedTree, KeyedTreeMut, TreeRecorder};
-pub use treedb::{TreeDB, TreeDBBuilder};
-pub use treedbmut::{TreeDBMut, TreeDBMutBuilder};
-
 #[cfg(test)]
 mod tests;
+
+// INTERNALS
+// ================================================================================================
+
+use error::{DataError, KeyError, NodeError};
+use hash_db::HashDBRef;
+use key::Key;
+use node::{ChildSelector, Node, NodeHash};
+use storage::NodeStorage;
+use tree::null_nodes;
+
+use hashbrown::{HashMap, HashSet};
+
+// RE-EXPORTS
+// ================================================================================================
+
+pub use error::TreeError;
+pub use hash_db::Hasher;
+pub use indexdb::IndexTreeDB;
+pub use indexdbmut::IndexTreeDBMut;
+pub use proof::StorageProof;
+pub use recorder::Recorder;
+pub use tree::{IndexTree, IndexTreeMut, KeyedTree, KeyedTreeMut, TreeRecorder};
+pub use treedb::{TreeDB, TreeDBBuilder};
+pub use treedbmut::{TreeDBMut, TreeDBMutBuilder};
 
 // TYPES
 // ================================================================================================

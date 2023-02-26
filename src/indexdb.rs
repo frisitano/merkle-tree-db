@@ -1,13 +1,12 @@
 use super::{DBValue, Hasher, IndexTree, Key, KeyedTree, TreeDB, TreeError};
 
-/// A TreeDB that uses a u64 index to access the underlying database.
-/// Wraps a TreeDB and converts a u64 index to a Key of the appropriate depth to access
-/// the underlying TreeDB.
-pub struct IndexedTreeDB<'db, const D: usize, H: Hasher> {
+/// A TreeDB that uses a u64 index to specify the leaves in the tree. Wraps a TreeDB and converts
+/// a u64 index to a Key of the appropriate depth to access the underlying TreeDB.
+pub struct IndexTreeDB<'db, const D: usize, H: Hasher> {
     keyed_db: TreeDB<'db, D, H>,
 }
 
-impl<'db, H: Hasher + 'db, const D: usize> IndexTree<H, D> for IndexedTreeDB<'db, D, H> {
+impl<'db, H: Hasher + 'db, const D: usize> IndexTree<H, D> for IndexTreeDB<'db, D, H> {
     fn root(&self) -> &<H as Hasher>::Out {
         self.keyed_db.root()
     }

@@ -49,16 +49,6 @@ impl<H: Hasher> NodeStorage<H> {
             .and_then(|node| self.nodes.remove(hash).map(|_| node))
     }
 
-    /// check if a node is in the storage
-    pub fn contains(&self, hash: &H::Out) -> bool {
-        self.nodes.contains_key(hash)
-    }
-
-    /// check if the storage is empty
-    pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
-    }
-
     /// iterate over key - value pairs of the storage
     pub fn iter(&self) -> hashbrown::hash_map::Iter<H::Out, (Node<H>, usize)> {
         self.nodes.iter()

@@ -15,16 +15,12 @@ impl core::fmt::Display for TreeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use TreeError::*;
         match self {
-            DataError(err) => write!(f, "Data Error: {}", err),
-            NodeError(err) => write!(f, "Node Error: {}", err),
+            DataError(err) => write!(f, "Data Error: {err}"),
+            NodeError(err) => write!(f, "Node Error: {err}"),
             DepthTooLarge(actual, max) => {
-                write!(
-                    f,
-                    "depth too large {} - max supported depth is {}",
-                    actual, max
-                )
+                write!(f, "depth {actual} too large - max supported depth is {max}",)
             }
-            KeyError(err) => write!(f, "key error: {}", err),
+            KeyError(err) => write!(f, "key error: {err}"),
         }
     }
 }

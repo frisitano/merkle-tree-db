@@ -47,6 +47,11 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
         self
     }
 
+    pub fn default_root() -> H::Out {
+        let (_, default_root) = null_nodes::<H>(D * 8);
+        default_root
+    }
+
     /// Consumes the builder and returns a TreeDBMut
     pub fn build(self) -> TreeDBMut<'db, D, H> {
         let (null_nodes, default_root) = null_nodes::<H>(D * 8);

@@ -3,13 +3,14 @@ use super::{DBValue, HashMap, Hasher, Node, NodeHash, TreeError};
 // TRAITS
 // ================================================================================================
 
-pub trait KeyedTree<H: Hasher, const N: usize> {
+/// A immutable key-value datastore implemented as a database-backed sparse merkle tree.
+pub trait KeyedTree<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
     fn root(&self) -> &H::Out;
 
     /// Returns the depth of the tree.
     fn depth(&self) -> usize {
-        N * 8
+        D * 8
     }
 
     /// Returns the value at the provided key.
@@ -31,13 +32,13 @@ pub trait KeyedTree<H: Hasher, const N: usize> {
 }
 
 /// A mutable key-value datastore implemented as a database-backed sparse merkle tree.
-pub trait KeyedTreeMut<H: Hasher, const N: usize> {
+pub trait KeyedTreeMut<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
     fn root(&mut self) -> &H::Out;
 
     /// Returns the depth of the tree.
     fn depth(&self) -> usize {
-        N * 8
+        D * 8
     }
 
     /// Returns the value at the provided key.
@@ -64,6 +65,7 @@ pub trait KeyedTreeMut<H: Hasher, const N: usize> {
     ) -> Result<bool, TreeError>;
 }
 
+/// A immutable index-value datastore implemented as a database-backed sparse merkle tree.
 pub trait IndexTree<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
     fn root(&self) -> &H::Out;
@@ -91,13 +93,14 @@ pub trait IndexTree<H: Hasher, const D: usize> {
     ) -> Result<bool, TreeError>;
 }
 
-pub trait IndexTreeMut<H: Hasher, const N: usize> {
+/// A mutable index-value datastore implemented as a database-backed sparse merkle tree.
+pub trait IndexTreeMut<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
     fn root(&mut self) -> &H::Out;
 
     /// Returns the depth of the tree.
     fn depth(&self) -> usize {
-        N * 8
+        D * 8
     }
 
     /// Returns the value at the provided key.

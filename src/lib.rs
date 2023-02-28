@@ -19,7 +19,6 @@ mod tests;
 // ================================================================================================
 
 use error::{DataError, KeyError, NodeError};
-use hash_db::HashDBRef;
 use key::Key;
 use node::{ChildSelector, Node, NodeHash};
 use storage::NodeStorage;
@@ -31,7 +30,6 @@ use hashbrown::{HashMap, HashSet};
 // ================================================================================================
 
 pub use error::TreeError;
-pub use hash_db::Hasher;
 pub use indexdb::IndexTreeDB;
 pub use indexdbmut::IndexTreeDBMut;
 pub use proof::StorageProof;
@@ -39,6 +37,8 @@ pub use recorder::Recorder;
 pub use tree::{IndexTree, IndexTreeMut, KeyedTree, KeyedTreeMut, TreeRecorder};
 pub use treedb::{TreeDB, TreeDBBuilder};
 pub use treedbmut::{TreeDBMut, TreeDBMutBuilder};
+
+pub use hash_db::{HashDB, HashDBRef, Hasher};
 
 // TYPES
 // ================================================================================================

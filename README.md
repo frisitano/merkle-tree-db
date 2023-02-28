@@ -155,6 +155,127 @@ This library provides a `Recorder` which can record database reads across transa
 can then be converted into a `StorageProof`.  The `StorageProof` can be sent to a client who can use
 it to reconstruct a database and re-execute transactions against the data.
 
+## User Guide
+
+### Database Persistance
+
+This library is generic over the database backed and hasher. This is achieved by being leveraging
+the following traits provided by the [`hash_db`](https://github.com/paritytech/trie/tree/master/hash-db) 
+library:
+
+- [`HashDB`](https://github.com/paritytech/trie/blob/master/hash-db/src/lib.rs#L127-L147) - A mutable key-value database trait
+- [`HashDBRef`](https://github.com/paritytech/trie/blob/master/hash-db/src/lib.rs#L150-L157) - An immutable key-value database trait
+- [`Hasher`](https://github.com/paritytech/trie/blob/master/hash-db/src/lib.rs#L53-L73) - A hasher trait
+
+The user is free to implement these traits for any database backend and hasher of their choosing. The traits
+are re-exported in this library.
+
+For the purpose of this user guide we will use a simple in-memory database `MemoryDB` which implements both
+`HashDB` and `HashDBRef`.
+
+### Implementing a Hasher
+
+Here we provide an example of implementing the `Hasher` trait for `Sha3`. We will use this hasher for the
+rest of the guide.
+
+```rust
+/// Unit struct for Sha3.
+#[derive(Debug)]
+pub struct Sha3;
+
+/// implementation of the Hasher trait for the Sha3 hasher
+/// This is used for testing
+impl Hasher for Sha3 {
+    type Out = [u8; 32];
+
+    type StdHasher = Hash256StdHasher;
+
+    const LENGTH: usize = 32;
+
+    fn hash(data: &[u8]) -> Self::Out {
+        Sha3_256::digest(data).into()
+    }
+}
+```
+
+### Keyed Merkle Tree
+
+Here we provide an example of constructing a `MemoryDB` which implements `HashDB` and `HashDBRef` traits.
+We then use this to construct a new `TreeDBMut` of depth 8. We perform a number of insertions and deletions.
+Finally we commit the changes. We then use the `MemoryDB` and updated root to construct a `TreeDB` and read 
+the data we have just committed.
+
+```rust
+// create an empty in memory database
+let mut memory_db = MemoryDB::<Sha3, NoopKey<_>, Vec<u8>>::default();
+
+// specify the tree depth - the actual depth will be 8 * TREE_DEPTH
+const TREE_DEPTH: usize = 1;
+
+// create a new default root
+let mut root = Default::default();
+
+// create a new mutable keyed tree with the specified depth
+let mut tree = TreeDBMutBuilder::<TREE_DEPTH, Sha3>::new(&mut memory_db, &mut root)
+    .expect("failed to create tree")
+    .build();
+
+// define some dummy data
+let data = vec![
+    ([0], b"flip".to_vec()),
+    ([2], b"flop".to_vec()),
+    ([8], b"flap".to_vec()),
+    ([9], b"flup".to_vec()),
+];
+
+// insert the data into the tree
+for (key, value) in data {
+    tree.insert(&key, value).expect("failed to insert data");
+}
+
+// commit the changes to the database
+tree.commit();
+
+// print the root hash
+println!("root hash: {:?}", tree.root());
+
+// delete some data from the tree
+tree.remove(&[0]).expect("failed to delete data");
+tree.remove(&[9]).expect("failed to delete data");
+
+// commit the changes to the database
+tree.commit();
+
+// print the root hash
+println!("root hash: {:?}", tree.root());
+
+// lets now create an immutable keyed tree using the same database and root
+let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&memory_db, &root)
+    .expect("failed to create tree")
+    .build();
+
+// lets now get the data we inserted
+let data_at_key_0 = tree.value(&[0]).expect("failed to get data");
+let data_at_key_2 = tree.value(&[2]).expect("failed to get data");
+let data_at_key_8 = tree.value(&[8]).expect("failed to get data");
+let data_at_key_9 = tree.value(&[9]).expect("failed to get data");
+
+// define a utility function to print the data
+fn print_data(data: Option<Vec<u8>>) {
+    match data {
+        Some(data) => println!("data: {:?}", std::str::from_utf8(&data).unwrap()),
+        None => println!("data: None"),
+    }
+}
+
+// print the data
+print_data(data_at_key_0);
+print_data(data_at_key_2);
+print_data(data_at_key_8);
+print_data(data_at_key_9);
+```
+
+
 ## Testing
 The library tests can be run using the command:
 ```bash

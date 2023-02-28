@@ -11,6 +11,7 @@ mod storage;
 mod tree;
 mod treedb;
 mod treedbmut;
+mod lookup;
 
 #[cfg(test)]
 mod tests;

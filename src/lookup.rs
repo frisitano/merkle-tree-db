@@ -12,8 +12,8 @@ use super::{
 pub struct Lookup<'db, const D: usize, H: Hasher> {
     storage: Option<&'db NodeStorage<H>>,
     db: &'db dyn HashDBRef<H, DBValue>,
-    root: NodeHash<H>,
-    null_nodes: HashMap<H::Out, Node<H>>,
+    root: &'db NodeHash<H>,
+    null_nodes: &'db HashMap<H::Out, Node<H>>,
     recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
 
@@ -89,14 +89,15 @@ impl<'db, const D: usize, H: Hasher> Lookup<'db, D, H> {
 
 //TODO: implement From<&TreeDB<'db, D, H>> and From<&TreeDBMut<'db, D, H>> for Lookup.
 
-// impl<'db, const D: usize, H: Hasher> From<TreeDB<'db, D, H>> for Lookup<'db, D, H> {
-//     fn from(tree_db: TreeDB<'db, D, H>) -> Self {
+// impl<'db, const D: usize, H: Hasher> From<&TreeDB<'db, D, H>> for Lookup<'db, D, H> {
+//     fn from(tree_db: &TreeDB<'db, D, H>) -> Self {
 //         let TreeDB {
 //             db,
 //             root,
 //             null_nodes,
 //             recorder,
 //         } = tree_db;
+
 //         Self {
 //             storage: None,
 //             db,
@@ -107,8 +108,8 @@ impl<'db, const D: usize, H: Hasher> Lookup<'db, D, H> {
 //     }
 // }
 
-// impl<'db, const D: usize, H: Hasher> From<TreeDBMut<'db, D, H>> for Lookup<'db, D, H> {
-//     fn from(tree_db_mut: TreeDBMut<'db, D, H>) -> Self {
+// impl<'db, const D: usize, H: Hasher> From<&TreeDBMut<'db, D, H>> for Lookup<'db, D, H> {
+//     fn from(tree_db_mut: &TreeDBMut<'db, D, H>) -> Self {
 //         let TreeDBMut::<'db, D, H> {
 //             storage,
 //             db,
@@ -117,9 +118,7 @@ impl<'db, const D: usize, H: Hasher> Lookup<'db, D, H> {
 //             recorder,
 //             ..
 //         } = tree_db_mut;
-//         let db_immmut: &'db dyn HashDB<H, Vec<u8>> = db;
-//         let db_ref_immut: &'db dyn HashDBRef<H, Vec<u8>> =
-//             &db_immmut as &'db dyn HashDBRef<H, Vec<u8>>;
+
 //         Self {
 //             storage: Some(storage),
 //             db: db_ref_immut,

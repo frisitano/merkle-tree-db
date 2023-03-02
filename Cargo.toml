@@ -3,9 +3,16 @@ name = "binary-merkle-tree"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "keyed-tree-example"
-path = "bin/keyed_tree.rs"
+[[example]]
+name = "keyed_tree"
+required-features = ["executable"]
+
+[[example]]
+name = "index_tree"
+required-features = ["executable"]
+
+[[example]]
+name = "recorder"
 required-features = ["executable"]
 
 [dependencies]

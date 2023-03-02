@@ -86,7 +86,7 @@ impl<const D: usize> TryFrom<&u64> for Key<D> {
         }
 
         let mut key = [0u8; D];
-        key.copy_from_slice(&value.to_be_bytes()[..D]);
+        key.copy_from_slice(&value.to_be_bytes()[8 - D..]);
         Ok(Key(key))
     }
 }

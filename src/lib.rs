@@ -30,8 +30,8 @@ use hashbrown::{HashMap, HashSet};
 // ================================================================================================
 
 pub use error::TreeError;
-pub use indexdb::IndexTreeDB;
-pub use indexdbmut::IndexTreeDBMut;
+pub use indexdb::{IndexTreeDB, IndexTreeDBBuilder};
+pub use indexdbmut::{IndexTreeDBMut, IndexTreeDBMutBuilder};
 pub use proof::StorageProof;
 pub use recorder::Recorder;
 pub use tree::{IndexTree, IndexTreeMut, KeyedTree, KeyedTreeMut, TreeRecorder};

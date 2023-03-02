@@ -1,9 +1,11 @@
-use binary_merkle_tree::{Hasher, KeyedTree, KeyedTreeMut, TreeDBBuilder, TreeDBMutBuilder};
+use binary_merkle_tree::{
+    Hasher, KeyedTree, KeyedTreeMut, Recorder, TreeDBBuilder, TreeDBMutBuilder,
+};
 use hash256_std_hasher::Hash256StdHasher;
 use hash_db::Prefix;
 use memory_db::{KeyFunction, MemoryDB};
 use sha3::{Digest, Sha3_256};
-use std::{default, marker::PhantomData};
+use std::marker::PhantomData;
 
 /// Unit struct for Sha3.
 #[derive(Debug)]
@@ -67,29 +69,37 @@ fn main() {
     // commit the changes to the database
     tree.commit();
 
-    // print the root hash
-    println!("root hash: {:?}", tree.root());
-
-    // delete some data from the tree
-    tree.remove(&[0]).expect("failed to delete data");
-    tree.remove(&[9]).expect("failed to delete data");
-
-    // commit the changes to the database
-    tree.commit();
-
-    // print the root hash
-    println!("root hash: {:?}", tree.root());
+    // lets construct a recorder
+    let mut recorder = Recorder::<Sha3>::new();
 
     // lets now create an immutable keyed tree using the same database and root
     let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&memory_db, &root)
         .expect("failed to create tree")
+        .with_recorder(&mut recorder)
         .build();
 
     // lets now get the data we inserted
-    let data_at_key_0 = tree.value(&[0]).expect("failed to get data");
-    let data_at_key_2 = tree.value(&[2]).expect("failed to get data");
-    let data_at_key_8 = tree.value(&[8]).expect("failed to get data");
-    let data_at_key_9 = tree.value(&[9]).expect("failed to get data");
+    tree.value(&[0]).expect("failed to get data");
+    tree.value(&[2]).expect("failed to get data");
+    tree.value(&[8]).expect("failed to get data");
+    tree.value(&[9]).expect("failed to get data");
+
+    // now lets generate a storage proof which will have recorded the tree nodes associated with the value lookups
+    let storage_proof = recorder.drain_storage_proof();
+
+    // now lets convert this to an in memory DB
+    let memory_db = storage_proof.into_memory_db::<Sha3>();
+
+    // now lets create a tree from this memory DB
+    let tree = TreeDBBuilder::<TREE_DEPTH, Sha3>::new(&memory_db, &root)
+        .expect("failed to create tree")
+        .build();
+
+    // now lets get the data again
+    let data_at_0 = tree.value(&[0]).expect("failed to get data");
+    let data_at_2 = tree.value(&[2]).expect("failed to get data");
+    let data_at_8 = tree.value(&[8]).expect("failed to get data");
+    let data_at_9 = tree.value(&[9]).expect("failed to get data");
 
     // define a utility function to print the data
     fn print_data(data: Option<Vec<u8>>) {
@@ -100,8 +110,8 @@ fn main() {
     }
 
     // print the data
-    print_data(data_at_key_0);
-    print_data(data_at_key_2);
-    print_data(data_at_key_8);
-    print_data(data_at_key_9);
+    print_data(data_at_0);
+    print_data(data_at_2);
+    print_data(data_at_8);
+    print_data(data_at_9);
 }

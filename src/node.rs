@@ -19,16 +19,6 @@ pub enum NodeHash<H: Hasher> {
     Default(H::Out),
 }
 
-impl<H: Hasher> core::fmt::Debug for NodeHash<H> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NodeHash::InMemory(hash) => write!(f, "InMemory({hash:?})"),
-            NodeHash::Database(hash) => write!(f, "Database({hash:?})"),
-            NodeHash::Default(hash) => write!(f, "Default({hash:?})"),
-        }
-    }
-}
-
 impl<H: Hasher> core::fmt::Display for NodeHash<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -129,20 +119,11 @@ pub enum Node<H: Hasher> {
     },
 }
 
-impl<H: Hasher> std::fmt::Debug for Node<H> {
+impl<H: Hasher> std::fmt::Display for Node<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Node::Value { hash, value } => f
-                .debug_struct("Value")
-                .field("hash", &hash)
-                .field("value", &value)
-                .finish(),
-            Node::Inner { hash, left, right } => f
-                .debug_struct("Inner")
-                .field("hash", &hash)
-                .field("left", &left)
-                .field("right", &right)
-                .finish(),
+            Node::Value { hash, value } => write!(f, "Value({hash:?}, {value:?})"),
+            Node::Inner { hash, left, right } => write!(f, "Inner({hash:?}, {left}, {right})"),
         }
     }
 }

@@ -3,7 +3,7 @@
 
 /// Errors associated with the tree. These errors are returned by the tree methods and wrap
 /// errors returned by the underlying components.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TreeError {
     DataError(DataError),
     NodeError(NodeError),
@@ -29,7 +29,7 @@ impl core::fmt::Display for TreeError {
 // ================================================================================================
 
 /// Errors associated with the underlying data the tree is built on.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DataError {
     DatabaseDataNotFound(Vec<u8>),
     NullNodeDataNotFound(Vec<u8>),
@@ -59,7 +59,7 @@ impl core::fmt::Display for DataError {
 // ================================================================================================
 
 /// Errors associated with the nodes in the tree.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum NodeError {
     DecodeNodeEmptyValue,
     DecodeNodeNoData,
@@ -108,7 +108,7 @@ impl core::fmt::Display for NodeError {
 // ================================================================================================
 
 /// Errors associated with the keys used to access the tree.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum KeyError {
     IncorrectKeySize(usize, usize),
     BitIndexOutOfBounds(usize, usize),

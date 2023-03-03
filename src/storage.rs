@@ -4,7 +4,6 @@ use super::{HashMap, Hasher, Node};
 // ================================================================================================
 
 /// NodeStorage used to store in memory nodes
-#[derive(Debug)]
 pub struct NodeStorage<H: Hasher> {
     nodes: HashMap<H::Out, (Node<H>, usize)>,
 }

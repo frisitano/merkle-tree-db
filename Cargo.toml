@@ -6,7 +6,7 @@ license = "MIT"
 description = "Merkle tree database"
 keywords = ["merkle", "tree", "sparse", "database"]
 readme = "README.md"
-authors = "frisitano"
+authors = ["frisitano"]
 repository = "https://github.com/frisitano"
 
 [[example]]

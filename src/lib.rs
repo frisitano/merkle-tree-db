@@ -1,4 +1,10 @@
-// #![cfg_attr(not(feature = "std"), no_std)]
+//! merkle-tree-db is a highly flexible library for working with merkle trees. It supports persistance
+//! over any key-value database backend. The merkle tree data structures are stored as sparse merkle
+//! trees allowing for efficient lookups, updates and persistence. The library is generic over the
+//! hasher used and the depth of the tree. Sparse merkle trees that leverage circuit friendly hash
+//! functions (e.g Poseidon, Rescue-Prime) are performant in a ZKP setting and as such this library can
+//! serve this purpose. This library supports both indexed merkle trees (max depth 64) and keyed
+//! (addressable) merkle trees (max depth usize::MAX).
 
 mod error;
 mod indexdb;

@@ -15,9 +15,8 @@ pub struct TreeDBBuilder<'db, const D: usize, H: Hasher> {
     recorder: Option<&'db mut dyn TreeRecorder<H>>,
 }
 
-/// Implementation of the TreeDBBuilder
 impl<'db, const D: usize, H: Hasher> TreeDBBuilder<'db, D, H> {
-    /// Construct a new db builder
+    /// Construct a new TreeDBBuilder
     pub fn new(db: &'db dyn HashDBRef<H, DBValue>, root: &'db H::Out) -> Result<Self, TreeError> {
         //TODO: warm user if default root provided
         if D > usize::MAX / 8 {
@@ -30,13 +29,13 @@ impl<'db, const D: usize, H: Hasher> TreeDBBuilder<'db, D, H> {
         })
     }
 
-    /// Add a recorder to the db buidler
+    /// Add a recorder to the TreeDBBuilder
     pub fn with_recorder(mut self, recorder: &'db mut dyn TreeRecorder<H>) -> Self {
         self.recorder = Some(recorder);
         self
     }
 
-    /// Add an optional recorder to the db builder
+    /// Add an optional recorder to the TreeDBBuilder
     pub fn with_optional_recorder<'recorder: 'db>(
         mut self,
         recorder: Option<&'recorder mut dyn TreeRecorder<H>>,
@@ -65,7 +64,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBBuilder<'db, D, H> {
 // TreeDB
 // ================================================================================================
 
-/// TreeDB use to access binary merkle tree from a db backend
+/// An immutable merkle tree db that uses a byte slice key to specify the leaves in the tree.
 pub struct TreeDB<'db, const D: usize, H: Hasher> {
     db: &'db dyn HashDBRef<H, DBValue>,
     root: NodeHash<H>,
@@ -73,13 +72,14 @@ pub struct TreeDB<'db, const D: usize, H: Hasher> {
     recorder: Option<core::cell::RefCell<&'db mut dyn TreeRecorder<H>>>,
 }
 
-/// Implementation of a TreeDB
 impl<'db, const D: usize, H: Hasher> TreeDB<'db, D, H> {
-    /// Return the db of a TreeDB
+    /// Return the underlying db of a TreeDB
     pub fn db(&self) -> &dyn HashDBRef<H, DBValue> {
         self.db
     }
 
+    /// Return the node associated with the provided hash. Retrieves the node from either the database
+    /// or the null node map if it is a default node.
     fn lookup(&self, node_hash: &NodeHash<H>) -> Result<Node<H>, TreeError> {
         let node = match node_hash {
             NodeHash::InMemory(_) => {
@@ -110,6 +110,8 @@ impl<'db, const D: usize, H: Hasher> TreeDB<'db, D, H> {
         Ok(node)
     }
 
+    /// Returns a leaf node for the provided key. If the leaf node does not exist, returns None.
+    /// If a proof is provided, the sibling hashes along the lookup path are stored in the proof.
     fn lookup_leaf_node(
         &self,
         key: &Key<D>,
@@ -141,15 +143,13 @@ impl<'db, const D: usize, H: Hasher> TreeDB<'db, D, H> {
     }
 }
 
-/// Tree implementation for TreeDB
 impl<'db, H: Hasher, const D: usize> KeyedTree<H, D> for TreeDB<'db, D, H> {
-    /// Returns a reference to the root hash
+    /// Returns the root of the tree
     fn root(&self) -> &H::Out {
         &self.root
     }
 
-    /// Iterates through the key and fetches the specified child hash for each inner
-    /// node until we reach the leaf node. Returns the value associated with the leaf node.
+    /// Returns the value associated with the given key
     fn value(&self, key: &[u8]) -> Result<Option<DBValue>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let node = self.lookup_leaf_node(&key, &mut None)?;
@@ -159,6 +159,7 @@ impl<'db, H: Hasher, const D: usize> KeyedTree<H, D> for TreeDB<'db, D, H> {
         }
     }
 
+    /// Returns the leaf associated with the given key
     fn leaf(&self, key: &[u8]) -> Result<Option<H::Out>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let node = self.lookup_leaf_node(&key, &mut None)?;
@@ -168,6 +169,7 @@ impl<'db, H: Hasher, const D: usize> KeyedTree<H, D> for TreeDB<'db, D, H> {
         }
     }
 
+    /// Returns a proof that a value exists in the tree at the given key
     fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let mut proof = Some(Vec::new());
@@ -181,6 +183,7 @@ impl<'db, H: Hasher, const D: usize> KeyedTree<H, D> for TreeDB<'db, D, H> {
         }
     }
 
+    /// Verifies that the given value is in the tree with the given root at the given index
     fn verify(
         key: &[u8],
         value: &[u8],

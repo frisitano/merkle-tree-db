@@ -48,11 +48,6 @@ impl<H: Hasher> NodeStorage<H> {
             .and_then(|node| self.nodes.remove(hash).map(|_| node))
     }
 
-    /// iterate over key - value pairs of the storage
-    pub fn iter(&self) -> hashbrown::hash_map::Iter<H::Out, (Node<H>, usize)> {
-        self.nodes.iter()
-    }
-
     /// drain the storage
     pub fn drain(&mut self) -> hashbrown::hash_map::Drain<H::Out, (Node<H>, usize)> {
         self.nodes.drain()

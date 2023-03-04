@@ -29,10 +29,12 @@ impl<H: Hasher> Recorder<H> {
         self.nodes.drain()
     }
 
+    /// Drain the recorder and return the recorded nodes as a storage proof.
     pub fn drain_storage_proof(self) -> StorageProof {
         StorageProof::new(self.nodes.into_iter().map(|(_, node)| node.into()))
     }
 
+    /// Returns the recorded nodes as a storage proof.
     pub fn to_storage_proof(&self) -> StorageProof {
         StorageProof::new(self.nodes.values().cloned().map(|node| node.into()))
     }

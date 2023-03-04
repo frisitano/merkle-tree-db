@@ -2,7 +2,11 @@
 // ================================================================================================
 
 /// Errors associated with the tree. These errors are returned by the tree methods and wrap
-/// errors returned by the underlying components.
+/// errors returned by the underlying components, these include:
+/// - DataError - errors associated with the underlying data the tree is built on
+/// - NodeError - errors associated with the nodes in the tree
+/// - DepthTooLarge - error returned when the specified tree depth is too large
+/// - KeyError - error associated with the key used to access the tree
 #[derive(Debug, PartialEq, Eq)]
 pub enum TreeError {
     DataError(DataError),

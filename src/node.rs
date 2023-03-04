@@ -7,8 +7,7 @@ use core::ops::Deref;
 /// NodeHash is used to store the hash of a node
 /// If the node is stored in memory, the hash is stored in the InMemory variant
 /// If the node is stored in database backend, the hash is stored in the Database variant
-/// This is used to give the client knowledge of whether the node is in memory or not
-/// The node will be in memory if it has been updated since the last commit
+/// If the node is a default node, the hash is stored in the Default variant
 #[derive(PartialEq, Eq, Hash)]
 pub enum NodeHash<H: Hasher> {
     /// Hash associated with a node stored in memory
@@ -29,9 +28,8 @@ impl<H: Hasher> core::fmt::Display for NodeHash<H> {
     }
 }
 
-/// NodeHash implementation
 impl<H: Hasher> NodeHash<H> {
-    /// Returns the hash of a node
+    /// Returns the inner hash of a node
     pub fn hash(&self) -> &H::Out {
         match self {
             NodeHash::InMemory(hash) => hash,
@@ -58,7 +56,6 @@ impl<H: Hasher> Clone for NodeHash<H> {
 }
 
 /// Implement default for NodeHash
-/// The default hash is used to represent an empty child node
 impl<H: Hasher> Default for NodeHash<H> {
     fn default() -> Self {
         NodeHash::Default(H::Out::default())
@@ -77,14 +74,14 @@ impl<H: Hasher> Deref for NodeHash<H> {
 // Node
 // ================================================================================================
 
-/// ChildSelector is used to select a child node of an inner node
+/// ChildSelector is used to specify a child node of an inner node
 pub enum ChildSelector {
     Left,
     Right,
 }
 
 impl ChildSelector {
-    /// Returns a ChildSelector from the provided bool. If the bool is false then Left is returned,
+    /// Constructs a ChildSelector from the provided bool. If the bool is false then Left is returned,
     /// if the bool is true then Right is returned.
     pub fn new(child: bool) -> Self {
         if child {
@@ -94,6 +91,7 @@ impl ChildSelector {
         }
     }
 
+    /// Returns a ChildSelector that represents the sibling of the current ChildSelector
     pub fn sibling(&self) -> Self {
         match self {
             ChildSelector::Left => ChildSelector::Right,
@@ -103,9 +101,7 @@ impl ChildSelector {
 }
 
 /// Node is used to store the data of a node. A value node stores the value and leaf hash. An inner
-/// node stores the height, left child hash, and right child hash. The height is used to determine
-/// determine the default hash of an empty child node such that it can be fetched from cache to
-/// calculate the hash of the current node.
+/// node stores the left child hash and right child hash.
 #[derive(PartialEq, Eq)]
 pub enum Node<H: Hasher> {
     Value {
@@ -132,6 +128,7 @@ impl<H: Hasher> std::fmt::Display for Node<H> {
 impl<H: Hasher> Node<H> {
     // CONSTRUCTORS
     // --------------------------------------------------------------------------------------------
+
     /// constructs a new value node
     pub fn new_value(value: &[u8]) -> Self {
         Node::Value {
@@ -227,6 +224,7 @@ impl<H: Hasher> Node<H> {
 
     // MODIFIERS
     // --------------------------------------------------------------------------------------------
+    /// Sets the specified child hash of an inner node.  This modifier is only valid for inner node.
     pub fn set_child_hash(
         &mut self,
         child: &ChildSelector,
@@ -285,6 +283,7 @@ impl<H: Hasher> Default for Node<H> {
 
 /// Serialize a node to a vector of bytes. A value node is prefixed with a 0. Inner nodes are
 /// prefixed as follows:
+/// 0 - Value node
 /// 1 - Inner node with both children
 /// 2 - Inner node with left child and default right child
 /// 3 - Inner node with right child and default left child
@@ -327,10 +326,8 @@ impl<H: Hasher> From<Node<H>> for Vec<u8> {
 /// Deserialize a node from a vector of bytes. The first byte of the vector is used to determine the
 /// type of node. A value node is prefixed with a 0. Inner nodes are prefixed as follows:
 /// 1 - Inner node with both children
-/// 2 - Inner node with only left child
-/// 3 - Inner node with only right child
-/// The second byte of the vector is used to determine the height of the node, as such the maximum
-/// height of the tree is 256.
+/// 2 - Inner node with left child and default right child
+/// 3 - Inner node with right child and default left child
 impl<H: Hasher> TryFrom<Vec<u8>> for Node<H> {
     type Error = NodeError;
 

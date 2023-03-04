@@ -76,6 +76,7 @@ impl<const D: usize> AsRef<[u8]> for Key<D> {
     }
 }
 
+/// Covert a `&u64` to a `Key<D>`
 impl<const D: usize> TryFrom<&u64> for Key<D> {
     type Error = KeyError;
 

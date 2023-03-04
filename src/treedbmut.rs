@@ -15,9 +15,8 @@ pub struct TreeDBMutBuilder<'db, const D: usize, H: Hasher> {
     recorder: Option<&'db mut dyn TreeRecorder<H>>,
 }
 
-/// Implementation of a TreeDBMutBuilder
 impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
-    /// Construct a new db builder
+    /// Construct a new TreeDBMutBuilder
     pub fn new(
         db: &'db mut dyn HashDB<H, DBValue>,
         root: &'db mut H::Out,
@@ -32,13 +31,13 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
         })
     }
 
-    /// Add a recorder to the db buidler
+    /// Add a recorder to the TreeDBMutBuilder
     pub fn with_recorder(mut self, recorder: &'db mut dyn TreeRecorder<H>) -> Self {
         self.recorder = Some(recorder);
         self
     }
 
-    /// Add an optional recorder to the db builder
+    /// Add an optional recorder to the TreeDBMutBuilder
     pub fn with_optional_recorder<'recorder: 'db>(
         mut self,
         recorder: Option<&'recorder mut dyn TreeRecorder<H>>,
@@ -47,7 +46,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
         self
     }
 
-    /// Consumes the builder and returns a TreeDBMut
+    /// build a TreeDBMut
     pub fn build(self) -> TreeDBMut<'db, D, H> {
         let (null_nodes, default_root) = null_nodes::<H>(D * 8);
         let root_handle = if self.root == &H::Out::default() || self.root == &default_root {
@@ -70,7 +69,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMutBuilder<'db, D, H> {
 // TreeDBMut
 // ================================================================================================
 
-/// TreeDBMut use to access and mutate merkle tree from a db backend
+/// A mutable merkle tree db that uses a byte slice key to specify the leaves in the tree.
 pub struct TreeDBMut<'db, const D: usize, H: Hasher> {
     storage: NodeStorage<H>,
     death_row: HashMap<H::Out, usize>,
@@ -82,7 +81,7 @@ pub struct TreeDBMut<'db, const D: usize, H: Hasher> {
 }
 
 impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
-    /// commit the changes of insertions held in storage and removes held in death row to the db
+    /// Commit the changes to the database
     pub fn commit(&mut self) {
         // iterate over storage and check if the node is in death row
         for (key, (node, insert_count)) in self.storage.drain() {
@@ -128,6 +127,8 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         }
     }
 
+    /// Return the node associated with the provided hash. Retrieves the node from either the database,
+    /// in memory storage or the null node map if it is a default node.
     fn lookup(&self, node_hash: &NodeHash<H>) -> Result<Node<H>, TreeError> {
         let node = match node_hash {
             NodeHash::InMemory(hash) => self.storage.get(hash).cloned().ok_or(
@@ -158,6 +159,8 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         Ok(node)
     }
 
+    /// Returns a leaf node for the provided key. If the leaf node does not exist, returns None.
+    /// If a proof is provided, the sibling hashes along the lookup path are stored in the proof.
     fn lookup_leaf_node(
         &self,
         key: &Key<D>,
@@ -188,6 +191,7 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
         Ok(Some(current_node))
     }
 
+    /// Remove the node associated with the provided hash from the tree.
     fn remove_node(&mut self, node_hash: &NodeHash<H>) {
         match node_hash {
             NodeHash::InMemory(hash) => {
@@ -277,20 +281,8 @@ impl<'db, const D: usize, H: Hasher> TreeDBMut<'db, D, H> {
 
         Ok((current_node, old_node, true))
     }
-
-    pub fn print(&self) {
-        // print the root
-        println!("root: {:?}", self.root);
-        // print the root_handle
-        println!("root_handle: {:?}", self.root_handle.hash());
-        // print the storage
-        println!("storage {}", self.storage.iter().count());
-        // print the death_row
-        println!("death_row: {:?}", self.death_row);
-    }
 }
 
-/// Implementation of a TreeDBMut
 impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H> {
     /// Return the root of the tree
     fn root(&mut self) -> &H::Out {
@@ -298,8 +290,7 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         self.root
     }
 
-    /// Iterates through the key and fetches the specified child hash for each inner
-    /// node until we reach the leaf node. Returns the value associated with the leaf node.
+    /// Returns the value associated with the provided key. If the key does not exist, returns None.
     fn value(&self, key: &[u8]) -> Result<Option<DBValue>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let node = self.lookup_leaf_node(&key, &mut None)?;
@@ -309,6 +300,7 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         }
     }
 
+    /// Returns the leaf associated with the provided key. If the key does not exist, returns None.
     fn leaf(&self, key: &[u8]) -> Result<Option<H::Out>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let node = self.lookup_leaf_node(&key, &mut None)?;
@@ -318,6 +310,7 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         }
     }
 
+    /// Returns a merkle proof for the provided key. If the key does not exist, returns None.
     fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let mut proof = Some(Vec::new());
@@ -331,6 +324,7 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         }
     }
 
+    /// Inserts the provided value at the provided key address and returns the old value if it exists.
     fn insert(&mut self, key: &[u8], value: DBValue) -> Result<Option<DBValue>, TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let current_root = self.root_handle.clone();
@@ -345,10 +339,12 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         Ok(old_node)
     }
 
+    /// Removes the value at the provided key address and returns the old value if it exists.
     fn remove(&mut self, key: &[u8]) -> Result<Option<DBValue>, TreeError> {
         self.insert(key, vec![])
     }
 
+    /// Verifies that the given value is in the tree with the given root at the given index
     fn verify(
         key: &[u8],
         value: &[u8],

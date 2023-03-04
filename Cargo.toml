@@ -7,7 +7,7 @@ description = "Merkle tree database"
 keywords = ["merkle", "tree", "sparse", "database"]
 readme = "README.md"
 authors = "frisitano"
-repository = "https://github.com/frisitanox"
+repository = "https://github.com/frisitano"
 
 [[example]]
 name = "keyed_tree"

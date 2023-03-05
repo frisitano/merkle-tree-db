@@ -85,8 +85,9 @@ impl<'db, H: Hasher + 'db, const D: usize> IndexTreeMut<H, D> for IndexTreeDBMut
         self.keyed_db.leaf(key.as_slice())
     }
 
-    /// Returns a proof that a value exists in the tree at the given index
-    fn proof(&self, index: &u64) -> Result<Option<Vec<DBValue>>, TreeError> {
+    /// Returns an inclusion proof of a value a the specified index.
+    /// Returns a tuple of form: (value, root, proof)  
+    fn proof(&self, index: &u64) -> Result<(Option<DBValue>, H::Out, Vec<DBValue>), TreeError> {
         let key = Key::<D>::try_from(index).map_err(TreeError::KeyError)?;
         self.keyed_db.proof(key.as_slice())
     }

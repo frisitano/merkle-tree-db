@@ -169,17 +169,22 @@ impl<'db, H: Hasher, const D: usize> KeyedTree<H, D> for TreeDB<'db, D, H> {
         }
     }
 
-    /// Returns a proof that a value exists in the tree at the given key
-    fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError> {
+    /// Returns an inclusion proof of a value a the specified key.
+    /// Returns a tuple of form: (value, root, proof)  
+    fn proof(&self, key: &[u8]) -> Result<(Option<DBValue>, H::Out, Vec<DBValue>), TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let mut proof = Some(Vec::new());
-        match self.lookup_leaf_node(&key, &mut proof)? {
-            Some(_) => {
-                let mut proof = proof.unwrap();
-                proof.reverse();
-                Ok(Some(proof))
+        let node = self.lookup_leaf_node(&key, &mut proof)?;
+        let root = *self.root.hash();
+        let mut proof = proof.unwrap();
+        proof.reverse();
+
+        match node {
+            Some(node) => {
+                let value = node.value().map_err(TreeError::NodeError)?.clone();
+                Ok((Some(value), root, proof))
             }
-            None => Ok(None),
+            None => Ok((None, root, proof)),
         }
     }
 

@@ -56,6 +56,9 @@ const TEST_DATA: [(u64, &[u8], &[u8]); 4] = [
     (300, &[1, 44], b"value4"),
 ];
 
+/// Non inclusion test data
+const NON_INCLUSION_DATA: [(u64, &[u8], &[u8]); 2] = [(50, &[0, 50], b""), (150, &[0, 15], b"")];
+
 /// Creates mock data for testing
 fn mock_data() -> (
     MemoryDB<Sha3, NoopKey<Sha3>, DBValue>,
@@ -214,20 +217,17 @@ macro_rules! test_proof {
         #[test]
         fn $name() {
             let (mut db, mut root) = mock_data();
-            let mut tree = $tree::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+            let tree = $tree::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
                 .unwrap()
                 .build();
 
-            for data in TEST_DATA.iter() {
-                let proof = tree.proof(&data.$selector).unwrap();
-                let value = tree.value(&data.$selector).unwrap();
-
-                let root = tree.root().clone();
+            for data in TEST_DATA.iter().chain(NON_INCLUSION_DATA.iter()) {
+                let (value, root, proof) = tree.proof(&data.$selector).unwrap();
                 assert_eq!(
                     $tree_interface::<TREE_DEPTH, Sha3>::verify(
                         &data.$selector,
-                        &value.unwrap(),
-                        &proof.unwrap(),
+                        &value.unwrap_or_else(|| vec![]),
+                        &proof,
                         &root
                     ),
                     Ok(true)
@@ -241,15 +241,13 @@ macro_rules! test_proof {
             let (db, root) = mock_data();
             let tree = $tree::<TREE_DEPTH, Sha3>::new(&db, &root).unwrap().build();
 
-            for data in TEST_DATA.iter() {
-                let proof = tree.proof(&data.$selector).unwrap();
-                let value = tree.value(&data.$selector).unwrap();
-
+            for data in TEST_DATA.iter().chain(NON_INCLUSION_DATA.iter()) {
+                let (value, root, proof) = tree.proof(&data.$selector).unwrap();
                 assert_eq!(
                     $tree_interface::<TREE_DEPTH, Sha3>::verify(
                         &data.$selector,
-                        &value.unwrap(),
-                        &proof.unwrap(),
+                        &value.unwrap_or_else(|| vec![]),
+                        &proof,
                         &root
                     ),
                     Ok(true)

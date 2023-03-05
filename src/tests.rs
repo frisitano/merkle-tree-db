@@ -1,8 +1,7 @@
-use crate::{IndexTreeDB, IndexTreeDBBuilder, TreeDBMut};
-
 use super::{
-    DBValue, Hasher, IndexTree, IndexTreeDBMut, IndexTreeDBMutBuilder, IndexTreeMut, KeyedTree,
-    KeyedTreeMut, TreeDB, TreeDBBuilder, TreeDBMutBuilder,
+    DBValue, Hasher, IndexTree, IndexTreeDB, IndexTreeDBBuilder, IndexTreeDBMut,
+    IndexTreeDBMutBuilder, IndexTreeMut, KeyedTree, KeyedTreeMut, Recorder, TreeDB, TreeDBBuilder,
+    TreeDBMut, TreeDBMutBuilder,
 };
 
 use hash256_std_hasher::Hash256StdHasher;
@@ -323,3 +322,77 @@ macro_rules! test_remove {
 
 test_remove!(test_remove_tree_db_mut, mut TreeDBMutBuilder, 1);
 test_remove!(test_remove_index_db_mut, mut IndexTreeDBMutBuilder, 0);
+
+// TEST RECORDER AND STORAGE PROOF
+// ================================================================================================
+macro_rules! test_recorder_and_storage_proof {
+    ($name:ident, mut $tree:ident, $selector:tt) => {
+        #[test]
+        fn $name() {
+            let mut recorder = Recorder::new();
+            let (mut db, mut root) = mock_data();
+            let tree = $tree::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
+                .unwrap()
+                .with_recorder(&mut recorder)
+                .build();
+
+            for data in TEST_DATA.iter() {
+                _ = tree.value(&data.$selector).unwrap();
+            }
+
+            let storage_proof = recorder.drain_storage_proof();
+            let mut memory_db = storage_proof.into_memory_db::<Sha3>();
+            let tree = $tree::<TREE_DEPTH, Sha3>::new(&mut memory_db, &mut root)
+                .unwrap()
+                .build();
+
+            for data in TEST_DATA.iter() {
+                let actual_value = tree.value(&data.$selector).unwrap();
+                assert_eq!(actual_value, Some(data.2.to_vec()));
+            }
+        }
+    };
+    ($name:ident, $tree:ident, $selector:tt) => {
+        #[test]
+        fn $name() {
+            let mut recorder = Recorder::new();
+            let (db, root) = mock_data();
+            let tree = $tree::<TREE_DEPTH, Sha3>::new(&db, &root)
+                .unwrap()
+                .with_recorder(&mut recorder)
+                .build();
+
+            for data in TEST_DATA.iter() {
+                let _ = tree.value(&data.$selector).unwrap();
+            }
+
+            let storage_proof = recorder.drain_storage_proof();
+            let memory_db = storage_proof.into_memory_db::<Sha3>();
+            let tree = $tree::<TREE_DEPTH, Sha3>::new(&memory_db, &root)
+                .unwrap()
+                .build();
+
+            for data in TEST_DATA.iter() {
+                let actual_value = tree.value(&data.$selector).unwrap();
+                assert_eq!(actual_value, Some(data.2.to_vec()));
+            }
+        }
+    };
+}
+
+test_recorder_and_storage_proof!(test_recorder_and_storage_proof_tree_db, TreeDBBuilder, 1);
+test_recorder_and_storage_proof!(
+    test_recorder_and_storage_proof_index_db,
+    IndexTreeDBBuilder,
+    0
+);
+test_recorder_and_storage_proof!(
+    test_recorder_and_storage_proof_tree_db_mut,
+    mut TreeDBMutBuilder,
+    1
+);
+test_recorder_and_storage_proof!(
+    test_recorder_and_storage_proof_index_db_mut,
+    mut IndexTreeDBMutBuilder,
+    0
+);

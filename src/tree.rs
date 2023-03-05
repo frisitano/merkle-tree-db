@@ -3,6 +3,8 @@ use super::{DBValue, HashMap, Hasher, Node, NodeHash, TreeError};
 // TRAITS
 // ================================================================================================
 
+type Proof<H> = (Option<DBValue>, <H as Hasher>::Out, Vec<DBValue>);
+
 /// A immutable key-value datastore implemented as a database-backed sparse merkle tree.
 pub trait KeyedTree<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
@@ -19,8 +21,8 @@ pub trait KeyedTree<H: Hasher, const D: usize> {
     /// Returns the leaf at the provided key.
     fn leaf(&self, key: &[u8]) -> Result<Option<H::Out>, TreeError>;
 
-    /// Returns an inclusion proof of a value a the specified key.  
-    fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError>;
+    /// Returns an inclusion proof of a value a the specified key.
+    fn proof(&self, key: &[u8]) -> Result<Proof<H>, TreeError>;
 
     /// Verifies an inclusion proof of a value at the specified key.
     fn verify(
@@ -48,7 +50,7 @@ pub trait KeyedTreeMut<H: Hasher, const D: usize> {
     fn leaf(&self, key: &[u8]) -> Result<Option<H::Out>, TreeError>;
 
     /// Returns an inclusion proof of a value a the specified key.
-    fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError>;
+    fn proof(&self, key: &[u8]) -> Result<Proof<H>, TreeError>;
 
     /// Inserts a value at the provided key.
     fn insert(&mut self, key: &[u8], value: DBValue) -> Result<Option<DBValue>, TreeError>;
@@ -75,16 +77,16 @@ pub trait IndexTree<H: Hasher, const D: usize> {
         D * 8
     }
 
-    /// Returns the value at the provided key.
+    /// Returns the value at the provided index.
     fn value(&self, index: &u64) -> Result<Option<DBValue>, TreeError>;
 
-    /// Returns the leaf at the provided key.
+    /// Returns the leaf at the provided index.
     fn leaf(&self, index: &u64) -> Result<Option<H::Out>, TreeError>;
 
-    /// Returns an inclusion proof of a value a the specified key.  
-    fn proof(&self, index: &u64) -> Result<Option<Vec<DBValue>>, TreeError>;
+    /// Returns an inclusion proof of a value a the specified index.
+    fn proof(&self, index: &u64) -> Result<Proof<H>, TreeError>;
 
-    /// Verifies an inclusion proof of a value at the specified key.
+    /// Verifies an inclusion proof of a value at the specified index.
     fn verify(
         index: &u64,
         value: &[u8],
@@ -103,22 +105,22 @@ pub trait IndexTreeMut<H: Hasher, const D: usize> {
         D * 8
     }
 
-    /// Returns the value at the provided key.
+    /// Returns the value at the provided index.
     fn value(&self, index: &u64) -> Result<Option<DBValue>, TreeError>;
 
     /// Returns the leaf at the provided key.
     fn leaf(&self, index: &u64) -> Result<Option<H::Out>, TreeError>;
 
-    /// Returns an inclusion proof of a value a the specified key.
-    fn proof(&self, index: &u64) -> Result<Option<Vec<DBValue>>, TreeError>;
+    /// Returns an inclusion proof of a value a the specified index.
+    fn proof(&self, index: &u64) -> Result<Proof<H>, TreeError>;
 
-    /// Inserts a value at the provided key.
+    /// Inserts a value at the provided index.
     fn insert(&mut self, index: &u64, value: DBValue) -> Result<Option<DBValue>, TreeError>;
 
-    /// Removes a value at the provided key.
+    /// Removes a value at the provided index.
     fn remove(&mut self, index: &u64) -> Result<Option<DBValue>, TreeError>;
 
-    /// Verifies an inclusion proof of a value at the specified key.
+    /// Verifies an inclusion proof of a value at the specified index.
     fn verify(
         index: &u64,
         value: &[u8],

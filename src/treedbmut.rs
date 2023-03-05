@@ -310,17 +310,22 @@ impl<'db, const D: usize, H: Hasher> KeyedTreeMut<H, D> for TreeDBMut<'db, D, H>
         }
     }
 
-    /// Returns a merkle proof for the provided key. If the key does not exist, returns None.
-    fn proof(&self, key: &[u8]) -> Result<Option<Vec<DBValue>>, TreeError> {
+    /// Returns an inclusion proof of a value at the specified key.
+    /// Returns a tuple of form: (value, root, proof)  
+    fn proof(&self, key: &[u8]) -> Result<(Option<DBValue>, H::Out, Vec<DBValue>), TreeError> {
         let key = Key::<D>::new(key).map_err(TreeError::KeyError)?;
         let mut proof = Some(Vec::new());
-        match self.lookup_leaf_node(&key, &mut proof)? {
-            Some(_) => {
-                let mut proof = proof.unwrap();
-                proof.reverse();
-                Ok(Some(proof))
+        let node = self.lookup_leaf_node(&key, &mut proof)?;
+        let root = *self.root_handle.hash();
+        let mut proof = proof.unwrap();
+        proof.reverse();
+
+        match node {
+            Some(node) => {
+                let value = node.value().map_err(TreeError::NodeError)?.clone();
+                Ok((Some(value), root, proof))
             }
-            None => Ok(None),
+            None => Ok((None, root, proof)),
         }
     }
 

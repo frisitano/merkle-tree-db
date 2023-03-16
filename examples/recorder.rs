@@ -1,9 +1,7 @@
-use binary_merkle_tree::{
-    Hasher, KeyedTree, KeyedTreeMut, Recorder, TreeDBBuilder, TreeDBMutBuilder,
-};
 use hash256_std_hasher::Hash256StdHasher;
 use hash_db::Prefix;
 use memory_db::{KeyFunction, MemoryDB};
+use merkle_tree_db::{Hasher, KeyedTree, KeyedTreeMut, Recorder, TreeDBBuilder, TreeDBMutBuilder};
 use sha3::{Digest, Sha3_256};
 use std::marker::PhantomData;
 

@@ -89,7 +89,9 @@ macro_rules! test_root {
             let mut tree = $tree::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
                 .unwrap()
                 .build();
+
             let actual_root = tree.root().clone();
+
             assert_eq!(&actual_root, &root);
         }
     };
@@ -98,7 +100,10 @@ macro_rules! test_root {
         fn $name() {
             let (db, root) = mock_data();
             let tree = $tree::<TREE_DEPTH, Sha3>::new(&db, &root).unwrap().build();
-            assert_eq!(tree.root(), &root);
+
+            let actual_root = tree.root();
+
+            assert_eq!(actual_root, &root);
         }
     };
 }
@@ -119,7 +124,10 @@ macro_rules! test_depth {
             let tree = $tree::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
                 .unwrap()
                 .build();
-            assert_eq!(tree.depth(), TREE_DEPTH * 8);
+
+            let depth = tree.depth();
+
+            assert_eq!(depth, TREE_DEPTH * 8);
         }
     };
     ($name:ident, $tree:ident) => {
@@ -127,7 +135,10 @@ macro_rules! test_depth {
         fn $name() {
             let (db, root) = mock_data();
             let tree = $tree::<TREE_DEPTH, Sha3>::new(&db, &root).unwrap().build();
-            assert_eq!(tree.depth(), TREE_DEPTH * 8);
+
+            let depth = tree.depth();
+
+            assert_eq!(depth, TREE_DEPTH * 8);
         }
     };
 }
@@ -150,6 +161,7 @@ macro_rules! test_value {
 
             for data in TEST_DATA.iter() {
                 let actual_value = tree.value(&data.$selector).unwrap();
+
                 assert_eq!(actual_value, Some(data.2.to_vec()));
             }
         }
@@ -162,6 +174,7 @@ macro_rules! test_value {
 
             for data in TEST_DATA.iter() {
                 let actual_value = tree.value(&data.$selector).unwrap();
+
                 assert_eq!(actual_value, Some(data.2.to_vec()));
             }
         }
@@ -186,6 +199,7 @@ macro_rules! test_leaf {
 
             for data in TEST_DATA.iter() {
                 let actual_leaf = tree.leaf(&data.$selector).unwrap();
+
                 assert_eq!(actual_leaf, Sha3::hash(&data.2).into());
             }
         }
@@ -198,6 +212,7 @@ macro_rules! test_leaf {
 
             for data in TEST_DATA.iter() {
                 let actual_leaf = tree.leaf(&data.$selector).unwrap();
+
                 assert_eq!(actual_leaf, Sha3::hash(&data.2).into());
             }
         }
@@ -222,6 +237,7 @@ macro_rules! test_proof {
 
             for data in TEST_DATA.iter().chain(NON_INCLUSION_DATA.iter()) {
                 let (value, root, proof) = tree.proof(&data.$selector).unwrap();
+
                 assert_eq!(
                     $tree_interface::<TREE_DEPTH, Sha3>::verify(
                         &data.$selector,
@@ -242,6 +258,7 @@ macro_rules! test_proof {
 
             for data in TEST_DATA.iter().chain(NON_INCLUSION_DATA.iter()) {
                 let (value, root, proof) = tree.proof(&data.$selector).unwrap();
+
                 assert_eq!(
                     $tree_interface::<TREE_DEPTH, Sha3>::verify(
                         &data.$selector,
@@ -276,19 +293,17 @@ macro_rules! test_insert {
             let mut tree = $tree::<TREE_DEPTH, Sha3>::new(&mut db, &mut root)
                 .unwrap()
                 .build();
-
             let new_value = b"new value";
             let new_leaf = Sha3::hash(new_value).into();
+
             let old_value = tree
                 .insert(&TEST_DATA[0].$selector, new_value.to_vec())
                 .unwrap();
+            let actual_value = tree.value(&TEST_DATA[0].$selector).unwrap();
+            let actual_leaf = tree.leaf(&TEST_DATA[0].$selector).unwrap();
 
             assert_eq!(old_value, Some(TEST_DATA[0].2.to_vec()));
-
-            let actual_value = tree.value(&TEST_DATA[0].$selector).unwrap();
             assert_eq!(actual_value, Some(new_value.to_vec()));
-
-            let actual_leaf = tree.leaf(&TEST_DATA[0].$selector).unwrap();
             assert_eq!(actual_leaf, new_leaf);
         }
     };
@@ -309,12 +324,11 @@ macro_rules! test_remove {
                 .build();
 
             let old_value = tree.remove(&TEST_DATA[0].$selector).unwrap();
-            assert_eq!(old_value, Some(TEST_DATA[0].2.to_vec()));
-
             let actual_value = tree.value(&TEST_DATA[0].$selector).unwrap();
-            assert_eq!(actual_value, None);
-
             let actual_leaf = tree.leaf(&TEST_DATA[0].$selector).unwrap();
+
+            assert_eq!(old_value, Some(TEST_DATA[0].2.to_vec()));
+            assert_eq!(actual_value, None);
             assert_eq!(actual_leaf, None);
         }
     };
@@ -339,7 +353,6 @@ macro_rules! test_recorder_and_storage_proof {
             for data in TEST_DATA.iter() {
                 _ = tree.value(&data.$selector).unwrap();
             }
-
             let storage_proof = recorder.drain_storage_proof();
             let mut memory_db = storage_proof.into_memory_db::<Sha3>();
             let tree = $tree::<TREE_DEPTH, Sha3>::new(&mut memory_db, &mut root)
@@ -348,6 +361,7 @@ macro_rules! test_recorder_and_storage_proof {
 
             for data in TEST_DATA.iter() {
                 let actual_value = tree.value(&data.$selector).unwrap();
+
                 assert_eq!(actual_value, Some(data.2.to_vec()));
             }
         }
@@ -365,7 +379,6 @@ macro_rules! test_recorder_and_storage_proof {
             for data in TEST_DATA.iter() {
                 let _ = tree.value(&data.$selector).unwrap();
             }
-
             let storage_proof = recorder.drain_storage_proof();
             let memory_db = storage_proof.into_memory_db::<Sha3>();
             let tree = $tree::<TREE_DEPTH, Sha3>::new(&memory_db, &root)
@@ -374,6 +387,7 @@ macro_rules! test_recorder_and_storage_proof {
 
             for data in TEST_DATA.iter() {
                 let actual_value = tree.value(&data.$selector).unwrap();
+
                 assert_eq!(actual_value, Some(data.2.to_vec()));
             }
         }

@@ -16,7 +16,7 @@ The library supports two interfaces for keyed merkle trees, one mutable and the 
 interfaces are shown below.
 
 ```rust
-/// A immutable key-value datastore implemented as a database-backed sparse merkle tree.
+/// An immutable key-value datastore implemented as a database-backed sparse merkle tree.
 pub trait KeyedTree<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
     fn root(&self) -> &H::Out;
@@ -86,7 +86,7 @@ These are implemented as wrappers around the keyed variants. The index (u64) is 
 slice before being passed to the keyed interface. The interfaces are shown below.
 
 ```rust
-/// A immutable index-value datastore implemented as a database-backed sparse merkle tree.
+/// An immutable index-value datastore implemented as a database-backed sparse merkle tree.
 pub trait IndexTree<H: Hasher, const D: usize> {
     /// Returns the root of the tree.
     fn root(&self) -> &H::Out;
@@ -179,6 +179,9 @@ Here we provide an example of implementing the `Hasher` trait for `Sha3`. We wil
 rest of the guide.
 
 ```rust
+use hash256_std_hasher::Hash256StdHasher;
+use sha3::{Digest, Sha3_256};
+
 /// Unit struct for Sha3.
 #[derive(Debug)]
 pub struct Sha3;

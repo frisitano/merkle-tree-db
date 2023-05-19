@@ -1,8 +1,8 @@
 use hash_db::{HashDBRef, EMPTY_PREFIX};
 
 use super::{
-    null_nodes, ChildSelector, DBValue, DataError, HashMap, Hasher, Key, KeyedTree, Node, NodeHash,
-    TreeError, TreeRecorder,
+    null_nodes, rstd::vec::Vec, ChildSelector, DBValue, DataError, HashMap, Hasher, Key, KeyedTree,
+    Node, NodeHash, TreeError, TreeRecorder,
 };
 
 // TreeDBBuilder

@@ -6,6 +6,11 @@
 //! serve this purpose. This library supports both indexed merkle trees (max depth 64) and keyed
 //! (addressable) merkle trees (max depth usize::MAX).
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 mod error;
 mod indexdb;
 mod indexdbmut;
@@ -24,12 +29,24 @@ mod tests;
 // INTERNALS
 // ================================================================================================
 
+#[cfg(feature = "std")]
+mod rstd {
+    pub use std::{fmt, iter, string, vec};
+}
+
+#[cfg(not(feature = "std"))]
+mod rstd {
+    pub use alloc::{string, vec};
+    pub use core::{fmt, iter};
+}
+
 use error::{DataError, KeyError, NodeError};
 use key::Key;
 use node::{ChildSelector, Node, NodeHash};
 use storage::NodeStorage;
 use tree::null_nodes;
 
+use self::rstd::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 // RE-EXPORTS

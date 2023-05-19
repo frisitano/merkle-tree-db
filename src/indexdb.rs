@@ -1,6 +1,6 @@
 use super::{
-    DBValue, HashDBRef, Hasher, IndexTree, Key, KeyedTree, TreeDB, TreeDBBuilder, TreeError,
-    TreeRecorder,
+    rstd::vec::Vec, DBValue, HashDBRef, Hasher, IndexTree, Key, KeyedTree, TreeDB, TreeDBBuilder,
+    TreeError, TreeRecorder,
 };
 
 // IndexTreeDBBuilder

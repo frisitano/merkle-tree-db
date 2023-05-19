@@ -7,6 +7,8 @@
 /// - NodeError - errors associated with the nodes in the tree
 /// - DepthTooLarge - error returned when the specified tree depth is too large
 /// - KeyError - error associated with the key used to access the tree
+use super::rstd::{string::String, vec::Vec};
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum TreeError {
     DataError(DataError),

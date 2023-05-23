@@ -4,18 +4,25 @@ name: Continuous integration
 
 jobs:
   check:
-    name: Check
-    runs-on: ubuntu-latest
+    name: Check Rust ${{matrix.toolchain}} on ${{matrix.os}} with ${{matrix.args}}
+    runs-on: ${{matrix.os}}-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable]
+        os: [ubuntu]
+        args: [--all-targets --no-default-features, --all-targets, --all-targets --all-features]
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{matrix.toolchain}}
           override: true
       - uses: actions-rs/cargo@v1
         with:
           command: check
+          args: ${{matrix.args}}
 
   test:
     name: Test Suite

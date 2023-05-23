@@ -1,6 +1,8 @@
 use super::{
-    null_nodes, ChildSelector, DBValue, DataError, HashDBRef, HashMap, Hasher, Key, KeyedTreeMut,
-    Node, NodeHash, NodeStorage, TreeError, TreeRecorder,
+    null_nodes,
+    rstd::{vec, vec::Vec},
+    ChildSelector, DBValue, DataError, HashDBRef, HashMap, Hasher, Key, KeyedTreeMut, Node,
+    NodeHash, NodeStorage, TreeError, TreeRecorder,
 };
 use core::cmp::Ordering;
 use hash_db::{HashDB, EMPTY_PREFIX};

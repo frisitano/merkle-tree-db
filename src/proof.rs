@@ -1,8 +1,10 @@
-use super::{HashSet, Hasher};
+use super::{
+    rstd::{iter::IntoIterator, vec::Vec},
+    HashSet, Hasher,
+};
 use core::marker::PhantomData;
 use hash_db::{AsHashDB, Prefix, EMPTY_PREFIX};
 use memory_db::{KeyFunction, MemoryDB};
-use std::iter::IntoIterator;
 
 // StorageProof
 // ================================================================================================

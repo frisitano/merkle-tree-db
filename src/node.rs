@@ -1,5 +1,11 @@
-use super::{DBValue, Hasher, NodeError};
+use super::{
+    rstd::{string::ToString, vec, vec::Vec},
+    DBValue, Hasher, NodeError,
+};
 use core::ops::Deref;
+
+#[cfg(feature = "std")]
+use super::rstd::fmt;
 
 // NodeHash
 // ================================================================================================
@@ -18,8 +24,9 @@ pub enum NodeHash<H: Hasher> {
     Default(H::Out),
 }
 
-impl<H: Hasher> core::fmt::Display for NodeHash<H> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+#[cfg(feature = "std")]
+impl<H: Hasher> fmt::Display for NodeHash<H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NodeHash::InMemory(hash) => write!(f, "InMemory({hash:?})"),
             NodeHash::Database(hash) => write!(f, "Database({hash:?})"),
@@ -115,8 +122,9 @@ pub enum Node<H: Hasher> {
     },
 }
 
-impl<H: Hasher> std::fmt::Display for Node<H> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+#[cfg(feature = "std")]
+impl<H: Hasher> fmt::Display for Node<H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Node::Value { hash, value } => write!(f, "Value({hash:?}, {value:?})"),
             Node::Inner { hash, left, right } => write!(f, "Inner({hash:?}, {left}, {right})"),

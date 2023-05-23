@@ -1,4 +1,7 @@
-use super::{DBValue, HashMap, Hasher, Node, NodeHash, TreeError};
+use super::{
+    rstd::{vec, vec::Vec},
+    DBValue, HashMap, Hasher, Node, NodeHash, TreeError,
+};
 
 // TRAITS
 // ================================================================================================

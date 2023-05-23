@@ -22,14 +22,14 @@ name = "recorder"
 required-features = ["executable"]
 
 [dependencies]
-hash-db = { version = "0.15.2", default-features = false }
+hash-db = { version = "0.16.0", default-features = false }
 hash256-std-hasher = { version = "0.15.2", optional = true, default-features = false }
 hashbrown = { version = "0.13.2", default-features = false, features = ["ahash"] }
-memory-db = { version = "0.29.0", default-features = false }
+memory-db = { version = "0.32.0", default-features = false }
 sha3 = { version = "0.10", optional = true }
 
 [dev-dependencies]
-rs_merkle = "1.2.0"
+rs_merkle = "1.4"
 sha2 = { version = "0.10", default-features = false }
 hash256-std-hasher = { version = "0.15.2", default-features = false }
 
